@@ -58,7 +58,7 @@ Abnahme: manuell gegen echten Kanal mit `DRY_RUN=1`. **Teilweise.**
 - [x] Runner-Tests: Erfolg, zweiter Lauf, Teilfehler und Retry, unavailable, Dry-Run, Rate-Limit, Abbruch, Listing-Fehler (grün)
 - [x] Queue-Tests: Oneshot nicht erneut, Retry, Priorität, Cancel (grün)
 - [x] Test "nie zwei Jobs gleichzeitig" (Stub mit `slow`, nie mehr als ein `running`)
-- [ ] Neustart-Simulation
+- [x] Neustart-Simulation (`recover()`: interrupted → requeued, States, kein doppelter Lauf)
 
 Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 
