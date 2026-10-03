@@ -77,6 +77,7 @@ Abnahme: Discovery läuft per Cron, `runs` korrekt. **Offen.**
 - [x] `index.html`, `app.js`, `style.css` (3 Tabs, Polling, kein Reload, Log-Panel, Sortierung)
 - [x] Detailseite (`GET /api/playlists/{id}`, `/files`, Hash `#playlist-{id}`, Titel-Links, globales Log-Panel)
 - [x] Detailseite: Cover + Videogalerie (`read_video_entries` mit info.json-Parse-Cache, `/thumb`-Endpunkt)
+- [x] Lokaler Player: `/video`-Stream (Range) + Lichtbox mit Playlist-Navigation
 - [x] `tests/test_api.py` (nicht ausgeführt)
 - [ ] Test Log-Offset
 

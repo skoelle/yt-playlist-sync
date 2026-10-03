@@ -25,6 +25,21 @@
     <h2>Log <span id="log-title" class="muted"></span> <button data-action="close-log">Schließen</button></h2>
     <pre id="log-pre"></pre>
   </div>
+  <div id="player" class="player" hidden>
+    <div class="player-box">
+      <div class="player-head">
+        <span id="player-title"></span>
+        <span id="player-count" class="muted"></span>
+        <a id="player-yt" class="ext" target="_blank" rel="noopener" hidden>↗ YouTube</a>
+        <button data-action="player-close" class="player-close">Schließen ✕</button>
+      </div>
+      <video id="player-video" controls autoplay playsinline></video>
+      <div class="actions player-nav">
+        <button data-action="player-prev" id="player-prev">← Vorheriges</button>
+        <button data-action="player-next" id="player-next">Nächstes →</button>
+      </div>
+    </div>
+  </div>
   <section id="tab-status" data-tab="status">
     <div class="cards">
       <div class="card">
