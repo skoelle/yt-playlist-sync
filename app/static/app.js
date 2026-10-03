@@ -504,6 +504,9 @@ window.addEventListener("hashchange", showTab);
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && state.player) closePlayer();
 });
+$("#player").addEventListener("click", (ev) => {
+  if (ev.target === ev.currentTarget && state.player) closePlayer();
+});
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
 setInterval(() => { if (document.visibilityState === "visible") tick(); }, 5000);
 showTab();
