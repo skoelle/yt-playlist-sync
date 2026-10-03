@@ -22,6 +22,10 @@ def sanitize_folder_name(title: str, playlist_id: str, max_bytes: int = 150) -> 
 
 
 def is_oneshot(title: str, keyword: str) -> bool:
-    """True if the keyword appears in the title (case-insensitive)."""
-    kw = (keyword or "").strip().lower()
-    return bool(kw) and kw in (title or "").lower()
+    """True if any comma-separated keyword appears in the title (case-insensitive)."""
+    title_l = (title or "").lower()
+    for kw in (keyword or "").split(","):
+        kw = kw.strip().lower()
+        if kw and kw in title_l:
+            return True
+    return False

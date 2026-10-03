@@ -4,7 +4,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 
 - **Discovery every hour.** New playlists are queued and downloaded immediately.
 - **Sync playlists** (title does *not* contain the keyword) are synced once per night. A per-playlist yt-dlp download archive makes sure only new videos are fetched.
-- **Oneshot playlists** (title contains the keyword, default `setlist`, case-insensitive) are downloaded once. After a complete run they are never touched again. If something went wrong you get a status, an error summary and a retry button.
+- **Oneshot playlists** (title contains one of the keywords, default `setlist`, comma-separated, case-insensitive) are downloaded once. After a complete run they are never touched again. If something went wrong you get a status, an error summary and a retry button.
 - **Never deletes anything.** Playlists that disappear from YouTube are only marked `removed`.
 - One download at a time, no parallelism, with sleeps between videos to stay polite.
 - Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*. Data is reloaded with JavaScript, the page itself is never reloaded.
@@ -46,7 +46,7 @@ Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video 
 | Variable | Default | Description |
 |---|---|---|
 | `YOUTUBE_CHANNEL` | required | Handle (`@name`), channel ID (`UC...`) or channel URL |
-| `ONESHOT_KEYWORD` | `setlist` | Keyword in the title that makes a playlist a oneshot |
+| `ONESHOT_KEYWORD` | `setlist` | Comma-separated keywords in the title that make a playlist a oneshot |
 | `DISCOVERY_CRON` | `0 * * * *` | Discovery schedule |
 | `SYNC_CRON` | `0 3 * * *` | Nightly sync of sync playlists |
 | `YTDLP_UPDATE_CRON` | `30 2 * * *` | Daily yt-dlp update |
