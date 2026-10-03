@@ -11,6 +11,9 @@ const state = {
   log: { jobId: null, offset: 0, open: false, finished: false },
   sort: { key: "date", dir: "desc" },
   oneshots: [],
+  detail: null,
+  detailId: null,
+  detailFrom: "status",
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
@@ -118,8 +121,10 @@ function renderStatus(st) {
   setText("sys-queue", st.queue.length ? st.queue.map((q) => q.playlist_title).join(", ") : "leer");
 }
 
-function jobRow(j) {
-  return `<td>${j.id}</td><td>${esc(j.playlist_title)}</td><td>${esc(j.trigger)}</td>
+function jobRow(j, showTitle = true) {
+  const titleCol = showTitle
+    ? `<td><a href="#playlist-${j.playlist_pk}">${esc(j.playlist_title)}</a></td>` : "";
+  return `<td>${j.id}</td>${titleCol}<td>${esc(j.trigger)}</td>
     <td>${badge(j.status)}${j.error_summary ? `<span class="sub">${esc(j.error_summary)}</span>` : ""}</td>
     <td>${esc(fmtDur(j.duration_s))}</td><td>${j.items_new}</td><td>${j.items_skipped}</td><td>${j.items_failed}</td>
     <td><button data-action="show-log" data-job="${j.id}">Log</button>
@@ -131,7 +136,8 @@ function syncRow(p) {
   const nextSync = st && st.schedules.sync.next;
   const videos = `${p.downloaded_count} / ${p.remote_item_count ?? "?"}` + (p.skipped_count ? `<span class="sub">${p.skipped_count} nicht verfügbar</span>` : "");
   const last = p.last_sync_at ? when(p.last_sync_at) : "-";
-  const title = `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` +
+  const title = `<a href="#playlist-${p.id}">${esc(p.title)}</a>` +
+    ` <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="YouTube öffnen">↗</a>` +
     (p.remote_status === "removed" ? ` <span class="badge s-failed">removed</span>` : "") +
     (p.ignored ? ` <span class="badge">ignoriert</span>` : "");
   const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
@@ -169,7 +175,8 @@ function oneshotRow(p) {
   if (p.state === "done") acts.push(`<button data-action="rerun" data-id="${p.id}">Full Re-Run</button>`);
   if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
   acts.push(`<button data-action="to-sync" data-id="${p.id}">Als Sync markieren</button>`);
-  return `<td><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a></td><td>${date}</td><td>${songs}</td>
+  return `<td><a href="#playlist-${p.id}">${esc(p.title)}</a>
+    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="YouTube öffnen">↗</a></td><td>${date}</td><td>${songs}</td>
     <td>${fmtBytes(p.size_bytes)}</td><td>${p.last_job ? esc(fmtDur(p.last_job.duration_s)) : "-"}</td>
     <td>${badge(p.state)}${err}</td><td>${acts.join(" ")}</td>`;
 }
@@ -185,6 +192,76 @@ function renderOneshots() {
   const songs = state.oneshots.reduce((a, p) => a + p.downloaded_count, 0);
   const size = state.oneshots.reduce((a, p) => a + p.size_bytes, 0);
   setText("oneshot-summary", `${state.oneshots.length} Setlists | ${songs} Songs | ${fmtBytes(size)}`);
+}
+
+function renderDetail(p, f) {
+  $("#detail-back").href = "#" + state.detailFrom;
+  setText("detail-title", p.title);
+  const yt = $("#detail-yt");
+  yt.href = p.url;
+  yt.hidden = false;
+  const badges = [badge(p.type), badge(p.state)];
+  if (p.ignored) badges.push('<span class="badge">ignoriert</span>');
+  if (p.remote_status === "removed") badges.push('<span class="badge s-failed">removed</span>');
+  const bhtml = badges.join(" ");
+  const bbox = $("#detail-badges");
+  if (bbox._html !== bhtml) { bbox.innerHTML = bhtml; bbox._html = bhtml; }
+
+  const acts = [];
+  if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Erneut versuchen</button>`);
+  if (p.state === "new" || p.state === "idle") {
+    acts.push(`<button data-action="run" data-id="${p.id}">${p.type === "oneshot" ? "Jetzt laden" : "Jetzt synchronisieren"}</button>`);
+  }
+  if (p.state === "done" && p.type === "oneshot") {
+    acts.push(`<button data-action="rerun" data-id="${p.id}">Full Re-Run</button>`);
+  }
+  if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
+  acts.push(`<button data-action="ignore" data-id="${p.id}" data-ignored="${p.ignored ? 0 : 1}">${p.ignored ? "Reaktivieren" : "Ignorieren"}</button>`);
+  if (p.type === "sync") acts.push(`<button data-action="to-oneshot" data-id="${p.id}">Als Oneshot markieren</button>`);
+  else acts.push(`<button data-action="to-sync" data-id="${p.id}">Als Sync markieren</button>`);
+  const ahtml = acts.join(" ");
+  const abox = $("#detail-actions");
+  if (abox._html !== ahtml) { abox.innerHTML = ahtml; abox._html = ahtml; }
+
+  const kv = [
+    ["Playlist-ID", `<code>${esc(p.playlist_id)}</code>`],
+    ["Typ", esc(p.type)],
+    ["Status", badge(p.state)],
+    ["Ordner", `<code>${esc(p.folder_name || "-")}</code>`],
+    ["Videos (YouTube)", p.remote_item_count ?? "-"],
+    ["Heruntergeladen", p.downloaded_count],
+    ["Nicht verfügbar", p.skipped_count],
+    ["Fehlgeschlagen", p.failed_count],
+    ["Größe (DB)", fmtBytes(p.size_bytes)],
+    ["Remote-Status", esc(p.remote_status || "-")],
+    ["Ignoriert", p.ignored ? "ja" : "nein"],
+    ["Erstmals gesehen", when(p.first_seen_at)],
+    ["Zuletzt gesehen", when(p.last_seen_at)],
+    ["Erster Download", when(p.first_downloaded_at)],
+    ["Abgeschlossen", when(p.completed_at)],
+    ["Letzter Sync", when(p.last_sync_at)],
+    ["Letzter Job", p.last_job
+      ? `#${p.last_job.id} · ${esc(p.last_job.trigger)} · ${badge(p.last_job.status)} · ${when(p.last_job.finished_at || p.last_job.started_at)}`
+      : "-"],
+  ];
+  const kvhtml = kv.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join("");
+  const kvbox = $("#detail-kv");
+  if (kvbox._html !== kvhtml) { kvbox.innerHTML = kvhtml; kvbox._html = kvhtml; }
+
+  if (!f.exists) {
+    $("#detail-files-none").hidden = false;
+    $("#detail-files-wrap").hidden = true;
+    setText("detail-files-summary", "");
+  } else {
+    $("#detail-files-none").hidden = true;
+    $("#detail-files-wrap").hidden = false;
+    const chips = Object.entries(f.by_ext).sort((a, b) => a[0] < b[0] ? -1 : 1)
+      .map(([e, n]) => `${n}× .${e || "?"}`).join(", ");
+    setText("detail-files-summary", `— ${f.total_files} Dateien, ${fmtBytes(f.total_bytes)}${chips ? ` (${chips})` : ""}`);
+    syncRows($("#detail-files-table tbody"), f.files, (x) => x.name, (x) =>
+      `<td>${esc(x.name)}</td><td>${fmtBytes(x.size_bytes)}</td><td>${when(x.modified_at)}</td>`);
+  }
+  syncRows($("#detail-jobs-table tbody"), p.jobs, (j) => j.id, (j) => jobRow(j, false));
 }
 
 async function pollLog() {
@@ -208,7 +285,6 @@ function openLog(jobId) {
   $("#log-pre").textContent = "";
   setText("log-title", `Job #${jobId}`);
   $("#log-panel").hidden = false;
-  if (state.tab !== "status") location.hash = "#status";
   pollLog();
 }
 
@@ -223,14 +299,22 @@ async function tick() {
       renderStatus(st);
       const jobs = await api("/jobs?limit=15");
       syncRows($("#jobs-table tbody"), jobs, (j) => j.id, jobRow);
-      await pollLog();
     } else if (state.tab === "sync") {
       const list = await api("/playlists?type=sync");
       syncRows($("#sync-table tbody"), list, (p) => p.id, syncRow);
     } else if (state.tab === "oneshot") {
       state.oneshots = await api("/playlists?type=oneshot");
       renderOneshots();
+    } else if (state.tab === "playlist") {
+      const id = state.detailId;
+      const [pl, files] = await Promise.all([
+        api(`/playlists/${id}`), api(`/playlists/${id}/files`),
+      ]);
+      if (state.detailId !== id) return;
+      state.detail = { pl, files };
+      renderDetail(pl, files);
     }
+    if (state.log.open) await pollLog();
   } catch (err) {
     $("#banners").innerHTML = `<div class="banner bad">Backend nicht erreichbar: ${esc(err.message)}</div>`;
     $("#banners")._html = null;
@@ -241,9 +325,19 @@ async function tick() {
 
 function showTab() {
   const h = (location.hash || "#status").slice(1);
-  state.tab = TABS.includes(h) ? h : "status";
+  const m = /^playlist-(\d+)$/.exec(h);
+  if (m) {
+    state.tab = "playlist";
+    state.detailId = Number(m[1]);
+    state.detail = null;
+  } else {
+    state.tab = TABS.includes(h) ? h : "status";
+    state.detailId = null;
+    state.detail = null;
+  }
   for (const sec of document.querySelectorAll("main > section")) sec.hidden = sec.dataset.tab !== state.tab;
-  for (const a of document.querySelectorAll("nav a")) a.classList.toggle("active", a.dataset.tab === state.tab);
+  const navTab = state.tab === "playlist" ? state.detailFrom : state.tab;
+  for (const a of document.querySelectorAll("nav a")) a.classList.toggle("active", a.dataset.tab === navTab);
   tick();
 }
 
@@ -285,6 +379,8 @@ async function act(action, el) {
 document.addEventListener("click", (ev) => {
   const btn = ev.target.closest("[data-action]");
   if (btn) { act(btn.dataset.action, btn); return; }
+  const plLink = ev.target.closest('a[href^="#playlist-"]');
+  if (plLink && state.tab !== "playlist") state.detailFrom = state.tab;
   const th = ev.target.closest("th[data-sort]");
   if (th) {
     const key = th.dataset.sort;

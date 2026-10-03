@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -48,7 +48,8 @@ def playlist_dict(pl: Playlist, last_job: Job | None) -> dict[str, Any]:
         "downloaded_count": pl.downloaded_count, "skipped_count": pl.skipped_count,
         "failed_count": pl.failed_count, "size_bytes": pl.size_bytes, "state": pl.state,
         "remote_status": pl.remote_status, "ignored": pl.ignored,
-        "first_seen_at": iso(pl.first_seen_at), "first_downloaded_at": iso(pl.first_downloaded_at),
+        "first_seen_at": iso(pl.first_seen_at), "last_seen_at": iso(pl.last_seen_at),
+        "first_downloaded_at": iso(pl.first_downloaded_at),
         "completed_at": iso(pl.completed_at), "last_sync_at": iso(pl.last_sync_at),
         "last_job": job_dict(last_job) if last_job else None,
     }
@@ -117,6 +118,51 @@ async def playlists(type: str | None = Query(None, pattern="^(sync|oneshot)$")) 
     if type == "oneshot":
         out.sort(key=lambda p: p["completed_at"] or p["first_downloaded_at"] or "", reverse=True)
     return out
+
+
+@router.get("/playlists/{pid}")
+async def playlist_detail(pid: int) -> dict[str, Any]:
+    with session_scope() as s:
+        pl = _get_playlist(s, pid)
+        jobs = s.scalars(
+            select(Job).where(Job.playlist_id == pid).order_by(Job.id.desc()).limit(25)
+        ).all()
+        return {**playlist_dict(pl, jobs[0] if jobs else None),
+                "jobs": [job_dict(j, pl.title) for j in jobs]}
+
+
+@router.get("/playlists/{pid}/files")
+async def playlist_files(pid: int, request: Request) -> dict[str, Any]:
+    cfg = request.app.state.settings
+    with session_scope() as s:
+        pl = _get_playlist(s, pid)
+        folder = pl.folder_name
+    base = cfg.data_dir.resolve()
+    files: list[dict[str, Any]] = []
+    exists = False
+    if folder:
+        target = (base / folder).resolve()
+        if target.is_relative_to(base) and target.is_dir():
+            exists = True
+            for p in sorted(target.iterdir(), key=lambda x: x.name):
+                if not p.is_file():
+                    continue
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).replace(tzinfo=None)
+                files.append({"name": p.name, "size_bytes": st.st_size, "modified_at": iso(mtime)})
+    by_ext: dict[str, int] = {}
+    for f in files:
+        name = f["name"]
+        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        by_ext[ext] = by_ext.get(ext, 0) + 1
+    return {
+        "exists": exists, "folder_name": folder,
+        "total_files": len(files), "total_bytes": sum(f["size_bytes"] for f in files),
+        "by_ext": by_ext, "files": files,
+    }
 
 
 @router.post("/playlists/{pid}/run")

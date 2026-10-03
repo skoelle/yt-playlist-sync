@@ -13,8 +13,11 @@ pytest.importorskip("apscheduler")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.config import Settings  # noqa: E402
+from app.db import session_scope  # noqa: E402
 from app.discovery import apply_discovery  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.models import Playlist  # noqa: E402
+from app.paths import sanitize_folder_name  # noqa: E402
 from app.ytdlp import PlaylistInfo  # noqa: E402
 
 
@@ -57,3 +60,45 @@ def test_playlist_endpoints(client):
 def test_ui_has_no_page_reload():
     js = (Path(__file__).parent.parent / "app" / "static" / "app.js").read_text()
     assert "location.reload" not in js
+
+
+def test_playlist_detail_and_files(client):
+    apply_discovery([PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist A")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+
+    det = client.get(f"/api/playlists/{pid}").json()
+    assert det["title"] == "Sommer Mix" and det["type"] == "sync"
+    assert det["jobs"] == [] and det["last_job"] is None
+    assert det["folder_name"] is None and det["last_seen_at"] is not None
+    assert det["url"] == "https://www.youtube.com/playlist?list=PL1"
+    assert client.get("/api/playlists/9999").status_code == 404
+    assert client.get("/api/playlists/9999/files").status_code == 404
+
+    assert client.post(f"/api/playlists/{pid}/run").status_code == 200
+    det = client.get(f"/api/playlists/{pid}").json()
+    assert len(det["jobs"]) == 1 and det["last_job"]["status"] == "queued"
+    assert det["folder_name"] is None  # set by the worker when the job starts
+
+    # no folder on disk yet (emulate what _run_job writes into the DB)
+    files = client.get(f"/api/playlists/{pid}/files").json()
+    assert files["exists"] is False and files["files"] == [] and files["folder_name"] is None
+
+    with session_scope() as s:
+        folder = sanitize_folder_name("Sommer Mix", "PL1")
+        s.get(Playlist, pid).folder_name = folder
+    data_dir = client.app.state.settings.data_dir
+    (data_dir / folder).mkdir(parents=True)
+    (data_dir / folder / "01 - Song [abc123].mkv").write_bytes(b"x" * 10)
+    (data_dir / folder / "01 - Song [abc123].info.json").write_text("{}")
+    files = client.get(f"/api/playlists/{pid}/files").json()
+    assert files["exists"] is True and files["folder_name"] == folder
+    assert files["total_files"] == 2 and files["total_bytes"] == 12
+    assert files["by_ext"] == {"mkv": 1, "json": 1}
+    assert [f["name"] for f in files["files"]] == sorted(f["name"] for f in files["files"])
+    assert all(f["modified_at"].endswith("Z") for f in files["files"])
+
+    # path traversal must never leave data_dir
+    with session_scope() as s:
+        s.get(Playlist, pid).folder_name = "../../etc"
+    files = client.get(f"/api/playlists/{pid}/files").json()
+    assert files["exists"] is False and files["files"] == []
