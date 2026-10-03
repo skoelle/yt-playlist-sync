@@ -11,6 +11,17 @@ def test_is_oneshot_variants():
     assert not is_oneshot("anything", "")
 
 
+def test_is_oneshot_multiple_keywords():
+    kw = "setlist,concert"
+    assert is_oneshot("Caliban Concert 2024", kw)
+    assert is_oneshot("Band Setlist Night", kw)
+    assert is_oneshot("open CONCERT air", kw)
+    assert not is_oneshot("Sommer Mix", kw)
+    assert is_oneshot("Concert for two", " setlist , concert ")
+    assert not is_oneshot("plain title", " , ")
+    assert not is_oneshot("", kw)
+
+
 def test_sanitize_blocks_traversal():
     name = sanitize_folder_name("../../etc/passwd", "PL123")
     assert "/" not in name and ".." not in name

@@ -69,7 +69,7 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 | Variable | Default | Beschreibung |
 |---|---|---|
 | `YOUTUBE_CHANNEL` | (Pflicht) | Handle (`@beispielkanal`), Channel-ID (`UC...`) oder URL |
-| `ONESHOT_KEYWORD` | `setlist` | Schlüsselwort im Titel, case-insensitive |
+| `ONESHOT_KEYWORD` | `setlist` | Komma-getrennte Schlüsselwörter im Titel, case-insensitive (z. B. `setlist,concert`) |
 | `DISCOVERY_CRON` | `0 * * * *` | Stündlich |
 | `SYNC_CRON` | `0 3 * * *` | Nachtsync |
 | `YTDLP_UPDATE_CRON` | `30 2 * * *` | yt-dlp Update |
@@ -99,7 +99,7 @@ Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht in
 5. Ping Erfolg bzw. `/fail`.
 
 ### 6.2 Typbestimmung
-`oneshot`, wenn `ONESHOT_KEYWORD.lower()` in `title.lower()` steht, sonst `sync`. Der Typ wird einmalig beim ersten Erkennen festgelegt, in der UI per Button umstellbar.
+`oneshot`, wenn eines der Komma-getrennten `ONESHOT_KEYWORD`-Wörter case-insensitive in `title` steht, sonst `sync`. Der Typ wird einmalig beim ersten Erkennen festgelegt, in der UI per Button umstellbar. Eine spätere Änderung von `ONESHOT_KEYWORD` wirkt nur auf Playlists, die danach neu erkannt werden – bestehende behalten ihren Typ.
 
 ### 6.3 Download-Job
 
