@@ -42,7 +42,7 @@ Ein Container, ein Python-Prozess, eingebaute Job-Queue mit genau einem Worker.
 
 ```
  Browser  --->  FastAPI (REST + statische UI)
-                Scheduler (APScheduler): Discovery, Nachtsync, yt-dlp Update, Log-Cleanup, DB-Backup 0:30
+                Scheduler (APScheduler): Discovery, Nachtsync, yt-dlp Update, Log-Cleanup, Backups 0:30
                 Job-Queue (1 Worker) ---> yt-dlp Subprozess (+ ffmpeg, deno)
                 DB (SQLite, optional MariaDB) in /config
                 Downloads nach /data (NAS-Share)
@@ -83,7 +83,7 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 | `HC_DISCOVERY_URL` / `HC_SYNC_URL` | leer | Healthchecks Ping-URLs |
 | `DRY_RUN` | `0` | `1` = nur auflisten und simulieren |
 | `LOG_LEVEL` / `LOG_RETENTION_DAYS` | `INFO` / `30` | Logging, Aufräumen alter Job-Logs (nie Videos) |
-| `BACKUP_DIR` / `BACKUP_KEEP` | `/backup` / `7` | Zielverzeichnis der DB-Backups, Anzahl Kopien (`0` = unbegrenzt) |
+| `BACKUP_DIR` / `BACKUP_KEEP` | `/backup` / `7` | Zielverzeichnis der nächtlichen Backups (DB + Download-Archive), Anzahl Kopien pro Typ (`0` = unbegrenzt) |
 
 Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht ins Repo.
 
@@ -154,14 +154,14 @@ yt-dlp \
 ### 6.8 Dateirechte
 Der Entrypoint legt einen Benutzer mit `PUID`/`PGID` an und startet per `gosu`. Ist `/data` nicht beschreibbar, zeigt die UI ein rotes Banner und Downloads pausieren.
 
-### 6.9 DB-Backup (nächtlich 0:30)
-- Täglich um `0:30` (Zeitzone = `TZ`) sichert der Scheduler die SQLite-Datenbank nach `BACKUP_DIR`, Dateiname `app-YYYYMMDD-HHMMSS.db` (Lokalzeit).
-- Umsetzung über die `sqlite3`-Backup-API der Stdlib, nicht per Dateikopie: bei laufendem Betrieb (WAL-Mode) liefert sie einen konsistenten Snapshot inklusive WAL-Inhalt, und die Kopie ist eine standalone DB ohne `-wal`-Sidecar.
-- Jede Kopie wird per `PRAGMA integrity_check` geprüft; bei Fehlern wird geloggt und die Datei liegen gelassen.
-- Rotation: von den eigenen Dateien im Namensmuster bleiben die neuesten `BACKUP_KEEP` (Default 7, `0` = unbegrenzt), ältere Kopien werden gelöscht. Gelöscht werden ausschließlich diese Backup-Dateien – nie Videos, Archive oder DB-Einträge.
-- Nur SQLite: bei einem `DATABASE_URL` auf MariaDB wird der Lauf übersprungen und geloggt (MariaDB-Backup läuft über `mysqldump`, siehe 4.1).
-- Fehler (Verzeichnis nicht beschreibbar, Quelldatei fehlt) werden geloggt; der Dienst läuft weiter, kein Crash.
-- **Restore:** Container stoppen, `app.db` durch die Backup-Datei ersetzen, danebenliegende alte `app.db-wal`/`app.db-shm` entfernen, Container starten.
+### 6.9 Backups (nächtlich 0:30)
+- Täglich um `0:30` (Zeitzone = `TZ`) sichert der Scheduler zwei Dinge nach `BACKUP_DIR`, Dateinamen mit Zeitstempel `YYYYMMDD-HHMMSS` (Lokalzeit):
+  - **Datenbank:** `app-YYYYMMDD-HHMMSS.db`. Umsetzung über die `sqlite3`-Backup-API der Stdlib, nicht per Dateikopie: bei laufendem Betrieb (WAL-Mode) liefert sie einen konsistenten Snapshot inklusive WAL-Inhalt, und die Kopie ist eine standalone DB ohne `-wal`-Sidecar. Geprüft per `PRAGMA integrity_check`; bei Fehlern wird geloggt und die Datei liegen gelassen.
+  - **Download-Archive:** `archives-YYYYMMDD-HHMMSS.tar.gz` (tar.gz von `/config/archives/`, alle `<playlist_id>.txt`). Winzig, aber nicht regenerierbar: ohne Archive prüft yt-dlp beim nächsten Lauf jedes Video neu (langsam, Rate-Limit-Risiko) und ein Full Re-Run einer fertigen Oneshot sähe alles als fehlend. Geprüft durch vollständiges Einlesen des tar.gz; fehlt das Verzeichnis, wird der Lauf übersprungen und geloggt.
+- Rotation: von den eigenen Dateien **je Namensmuster** (`app-*.db` und `archives-*.tar.gz`) bleiben die neuesten `BACKUP_KEEP` (Default 7, `0` = unbegrenzt), ältere Kopien werden gelöscht. Gelöscht werden ausschließlich diese Backup-Dateien – nie Videos, Archive oder DB-Einträge.
+- Nur SQLite: bei einem `DATABASE_URL` auf MariaDB wird der DB-Teil übersprungen und geloggt (MariaDB-Backup läuft über `mysqldump`, siehe 4.1); der Archive-Teil läuft unabhängig davon.
+- Jeder Lauf fängt Fehler ab (Verzeichnis nicht beschreibbar, Quelldatei fehlt): Fehler werden geloggt, der Dienst läuft weiter, kein Crash.
+- **Restore:** Container stoppen, `app.db` durch die Backup-Datei ersetzen, danebenliegende alte `app.db-wal`/`app.db-shm` entfernen; Archive mit `tar -xzf archives-<Stempel>.tar.gz -C /config` entpacken (vorhandene Dateien werden nur überschrieben, nichts gelöscht), Container starten.
 
 ## 7. Datenmodell
 
@@ -239,7 +239,7 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 11. Die Action baut ein amd64 Image, pusht `latest` und läuft wöchentlich ohne Cache.
 12. Die UI zeigt die yt-dlp Version.
 13. Die Detailseite zeigt Cover und Videogalerie; Klick auf ein Video spielt die lokale Datei (Hintergrund-Klick oder ESC schließt wieder).
-14. Nachts um 0:30 liegt ein per Integritätscheck geprüftes DB-Backup in `BACKUP_DIR`, alte Kopien rotieren nach `BACKUP_KEEP`.
+14. Nachts um 0:30 liegt in `BACKUP_DIR` ein per Integritätscheck geprüftes DB-Backup und ein geprüftes tar.gz der Download-Archive, alte Kopien rotieren je Typ nach `BACKUP_KEEP`.
 
 ## 13. Offene Punkte
 
@@ -259,3 +259,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Alembic-Migration `0001` legt das Schema über `Base.metadata.create_all` an.
 - Neu: Playlist-Detailseite mit Cover, Video-Galerie und lokalem Player (`GET /videos`, `/thumb`, `/video`), Klick auf Hintergrund/ESC/Buttons schließt die Lichtbox.
 - Neu: Nächtliches SQLite-Backup um 0:30 nach `BACKUP_DIR` mit Rotation `BACKUP_KEEP` (siehe 6.9).
+- Neu: Das nächtliche Backup enthält zusätzlich die Download-Archive als `archives-*.tar.gz` (siehe 6.9).

@@ -11,6 +11,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 - 🔒 No Google login and no API keys: only public playlists are used.
 - 🩺 Optional [Healthchecks](https://healthchecks.io) pings for the discovery run and the nightly sync.
 - 📦 yt-dlp updates itself on start and daily. The image is rebuilt weekly by GitHub Actions.
+- 🗄️ Nightly backup (00:30) of the database *and* the yt-dlp download archives, with rotation.
 
 > ⚠️ **Disclaimer:** Only download content you own or that you are allowed to download. Respect the YouTube Terms of Service and copyright law. You are responsible for how you use this tool.
 
@@ -38,7 +39,7 @@ The GHCR package is public: `docker pull ghcr.io/skoelle/yt-playlist-sync:latest
 |---|---|
 | `/config` | 🗄️ SQLite database, yt-dlp archives, job logs, self-updated yt-dlp. Use a **local** disk, not NFS (SQLite locking). |
 | `/data` | 🎞️ Download target, for example your NAS share. The container user (`PUID`/`PGID`) needs write access. |
-| `/backup` | 💾 Nightly database backups (see below). Mount it, otherwise the copies stay inside the container. |
+| `/backup` | 💾 Nightly backups: database and download archives (see below). Mount it, otherwise the copies stay inside the container. |
 
 Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video id>].<ext>`. The folder name is fixed at the first download and does not change when a playlist is renamed. Next to each video you get thumbnail, `.info.json`, description and subtitles (where available).
 
@@ -63,20 +64,30 @@ Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video 
 | `DRY_RUN` | `0` | `1` = list and simulate only |
 | `LOG_LEVEL` | `INFO` | Log level |
 | `LOG_RETENTION_DAYS` | `30` | Job log files older than this are removed (never videos) |
-| `BACKUP_DIR` | `/backup` | Target directory for the database backups |
-| `BACKUP_KEEP` | `7` | How many database backups to keep (`0` = unlimited) |
+| `BACKUP_DIR` | `/backup` | Target directory for the nightly backups |
+| `BACKUP_KEEP` | `7` | How many backups to keep per type, database copies and archive tarballs (`0` = unlimited) |
 
 ## 💾 Backup and restore
 
-Every night at 00:30 (local `TZ`) the service backs up its SQLite database into
-`BACKUP_DIR` as `app-YYYYMMDD-HHMMSS.db`, using SQLite's backup API: the copy is
-consistent even while the app is writing (WAL) and needs no sidecar files. Each
-copy is checked with `PRAGMA integrity_check`. The newest `BACKUP_KEEP` copies
-are kept, older ones are removed. Only SQLite is backed up — a MariaDB
-`DATABASE_URL` is skipped and logged.
+Every night at 00:30 (local `TZ`) the service writes two kinds of files into
+`BACKUP_DIR`, both stamped `YYYYMMDD-HHMMSS`:
 
-🔁 To restore: stop the container, replace `/config/app.db` with the backup file,
-delete stale `app.db-wal`/`app.db-shm` next to it, start the container.
+- **Database** — `app-YYYYMMDD-HHMMSS.db`, created with SQLite's backup API: the
+  copy is consistent even while the app is writing (WAL) and needs no sidecar
+  files. Each copy is checked with `PRAGMA integrity_check`.
+- **Download archives** — `archives-YYYYMMDD-HHMMSS.tar.gz`, a tar.gz of
+  `/config/archives/`. Tiny, but not regenerable: without them yt-dlp would
+  re-check every video on the next run. Each tarball is read back fully as an
+  integrity check.
+
+The newest `BACKUP_KEEP` copies of **each type** are kept, older ones are
+removed. Only SQLite is backed up — a MariaDB `DATABASE_URL` skips the database
+part (the archives are always backed up).
+
+🔁 To restore: stop the container, replace `/config/app.db` with the backup
+file, delete stale `app.db-wal`/`app.db-shm` next to it, unpack the archive
+tarball with `tar -xzf archives-<stamp>.tar.gz -C /config` (existing files are
+only overwritten, nothing is deleted), start the container.
 
 ## 📝 Behaviour notes
 
@@ -107,7 +118,7 @@ See [SPEC.md](SPEC.md) for the specification, [PLAN.md](PLAN.md) for the impleme
 app/
 ├── main.py, api.py          FastAPI app, REST endpoints, static UI serving
 ├── config.py, db.py         Settings (pydantic), engine, sessions, migrations
-├── models.py, backup.py     Data model, nightly SQLite backup with rotation
+├── models.py, backup.py     Data model, nightly DB + download-archive backups with rotation
 ├── scheduler.py             Cron jobs: discovery, nightly sync, yt-dlp update, log cleanup, backup
 ├── jobqueue.py, runner.py   Single-worker queue and the yt-dlp subprocess runner
 ├── ytdlp.py, discovery.py   yt-dlp command builder/parsers, playlist discovery

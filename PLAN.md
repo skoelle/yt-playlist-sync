@@ -66,6 +66,7 @@ Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 - [x] `app/healthchecks.py`
 - [x] `app/scheduler.py` (Discovery, Nachtsync, yt-dlp-Update, Startlauf, Log-Cleanup)
 - [x] Nachtliches DB-Backup 0:30 (`app/backup.py`, sqlite3-Backup-API, `BACKUP_DIR`/`BACKUP_KEEP`)
+- [x] Download-Archive im Nachtbackup (`backup_archives`: tar.gz von `archives/`, eigene Rotation, Integritätscheck durch Einlesen)
 
 Abnahme: Discovery läuft per Cron, `runs` korrekt. **Erfüllt (stündliche Discovery im laufenden Container).**
 
@@ -112,6 +113,7 @@ Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Erfüllt (public).**
 - Alembic-Migration `0001` nutzt `Base.metadata.create_all`.
 - Der Test-Workflow ist wiederverwendbar (`workflow_call`), der Build ruft ihn vor dem Image-Build auf.
 - DB-Backup über die `sqlite3`-Backup-API statt `cp`: WAL-Mode macht reine Dateikopien unzuverlässig; die API liefert einen konsistenten Snapshot ohne `-wal`-Sidecar. Rotation mit glob-Namensmuster, nur eigene `app-*.db`-Dateien.
+- Das Nachtbackup sichert zusätzlich `/config/archives/` als `archives-*.tar.gz`: `/data` deckt der Nutzer über den NAS-Snapshot ab, aber die Archive sind winzig, nicht regenerierbar und ohne sie würde yt-dlp beim nächsten Lauf jedes Video neu prüfen (Rate-Limit-Risiko) bzw. Full Re-Run alles als fehlend sehen. Rotation je Namensmuster getrennt (`app-*.db` und `archives-*.tar.gz`), MariaDB betrifft nur den DB-Teil. `logs/` und `ytdlp-lib/` bleiben bewusst draußen (nicht kritisch bzw. wächst neu).
 - Compose-Beispiel zeigt die echte öffentliche Image-URL `ghcr.io/skoelle/yt-playlist-sync:latest` und Übergabe von `ONESHOT_KEYWORD` per Interpolation (wie `YOUTUBE_CHANNEL`), nicht mehr hartkodiert; README-Raw-URL entsprechend korrigiert.
 - `renovate.json` ergänzt: `config:recommended`, Schedule „before 6am on Monday", Gruppen für GitHub Actions (automerge), Docker/Docker Compose (manuell), Python dependencies (automerge).
 - `.moonweb.yml` für die Projektübersicht (category `code`, subcategory „Archiving Tools").

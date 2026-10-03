@@ -13,7 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from . import ytdlp
-from .backup import backup_database
+from .backup import backup_archives, backup_database
 from .config import Settings
 from .db import session_scope
 from .discovery import finish_run, run_discovery, start_run
@@ -53,7 +53,7 @@ class AppScheduler:
             self.cleanup_logs, CronTrigger.from_crontab("15 4 * * *", timezone=s.tzinfo), id="cleanup_logs",
         )
         self.scheduler.add_job(
-            self.backup_db, CronTrigger.from_crontab("30 0 * * *", timezone=s.tzinfo),
+            self.backup_run, CronTrigger.from_crontab("30 0 * * *", timezone=s.tzinfo),
             id="backup", max_instances=1, coalesce=True,
         )
         self.scheduler.start()
@@ -145,10 +145,11 @@ class AppScheduler:
             except OSError:
                 pass
 
-    async def backup_db(self) -> None:
-        try:
-            path = backup_database(self.settings)
-            if path:
-                log.info("db backup written: %s", path)
-        except Exception:
-            log.exception("db backup failed")
+    async def backup_run(self) -> None:
+        for fn in (backup_database, backup_archives):
+            try:
+                path = fn(self.settings)
+                if path:
+                    log.info("backup written: %s", path)
+            except Exception:  # noqa: BLE001
+                log.exception("backup failed: %s", fn.__name__)
