@@ -5,18 +5,22 @@ import pytest
 pytest.importorskip("pydantic_settings")
 pytest.importorskip("apscheduler")
 
+from pathlib import Path  # noqa: E402
+
 from pydantic import ValidationError  # noqa: E402
 
 from app.config import Settings  # noqa: E402
 
 
 def test_defaults(monkeypatch):
-    for k in ("ONESHOT_KEYWORD", "DISCOVERY_CRON", "SYNC_CRON", "DRY_RUN", "DATABASE_URL"):
+    for k in ("ONESHOT_KEYWORD", "DISCOVERY_CRON", "SYNC_CRON", "DRY_RUN", "DATABASE_URL",
+              "BACKUP_DIR", "BACKUP_KEEP"):
         monkeypatch.delenv(k, raising=False)
     s = Settings(youtube_channel="@beispielkanal")
     assert s.oneshot_keyword == "setlist"
     assert s.discovery_cron == "0 * * * *" and s.sync_cron == "0 3 * * *"
     assert s.dry_run is False
+    assert s.backup_keep == 7 and s.backup_dir == Path("/backup")
     assert s.db_url.startswith("sqlite:///") and s.db_url.endswith("app.db")
 
 

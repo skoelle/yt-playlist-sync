@@ -67,6 +67,7 @@ Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 
 - [x] `app/healthchecks.py`
 - [x] `app/scheduler.py` (Discovery, Nachtsync, yt-dlp-Update, Startlauf, Log-Cleanup)
+- [x] Nachtliches DB-Backup 0:30 (`app/backup.py`, sqlite3-Backup-API, `BACKUP_DIR`/`BACKUP_KEEP`)
 - [ ] Tests: Ping-Mock, Nachtsync-Logik, Cron mit Zeitumstellung
 
 Abnahme: Discovery läuft per Cron, `runs` korrekt. **Offen.**
@@ -111,3 +112,4 @@ Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Offen.**
 - Dry-Run lässt Playlists im Status `new`, damit sie nach `DRY_RUN=0` wirklich geladen werden.
 - Alembic-Migration `0001` nutzt `Base.metadata.create_all`.
 - Der Test-Workflow ist wiederverwendbar (`workflow_call`), der Build ruft ihn vor dem Image-Build auf.
+- DB-Backup über die `sqlite3`-Backup-API statt `cp`: WAL-Mode macht reine Dateikopien unzuverlässig; die API liefert einen konsistenten Snapshot ohne `-wal`-Sidecar. Rotation mit glob-Namensmuster, nur eigene `app-*.db`-Dateien.

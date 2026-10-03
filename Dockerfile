@@ -22,7 +22,7 @@ ENV PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
     CONFIG_DIR=/config
 
-VOLUME ["/config", "/data"]
+VOLUME ["/config", "/data", "/backup"]
 EXPOSE 8048
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

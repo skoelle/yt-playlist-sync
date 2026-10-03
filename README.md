@@ -38,6 +38,7 @@ The GHCR package is private after the first push. Set it to *public* once in the
 |---|---|
 | `/config` | SQLite database, yt-dlp archives, job logs, self-updated yt-dlp. Use a **local** disk, not NFS (SQLite locking). |
 | `/data` | Download target, for example your NAS share. The container user (`PUID`/`PGID`) needs write access. |
+| `/backup` | Nightly database backups (see below). Mount it, otherwise the copies stay inside the container. |
 
 Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video id>].<ext>`. The folder name is fixed at the first download and does not change when a playlist is renamed. Next to each video you get thumbnail, `.info.json`, description and subtitles (where available).
 
@@ -62,6 +63,20 @@ Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video 
 | `DRY_RUN` | `0` | `1` = list and simulate only |
 | `LOG_LEVEL` | `INFO` | Log level |
 | `LOG_RETENTION_DAYS` | `30` | Job log files older than this are removed (never videos) |
+| `BACKUP_DIR` | `/backup` | Target directory for the database backups |
+| `BACKUP_KEEP` | `7` | How many database backups to keep (`0` = unlimited) |
+
+## Backup and restore
+
+Every night at 00:30 (local `TZ`) the service backs up its SQLite database into
+`BACKUP_DIR` as `app-YYYYMMDD-HHMMSS.db`, using SQLite's backup API: the copy is
+consistent even while the app is writing (WAL) and needs no sidecar files. Each
+copy is checked with `PRAGMA integrity_check`. The newest `BACKUP_KEEP` copies
+are kept, older ones are removed. Only SQLite is backed up — a MariaDB
+`DATABASE_URL` is skipped and logged.
+
+To restore: stop the container, replace `/config/app.db` with the backup file,
+delete stale `app.db-wal`/`app.db-shm` next to it, start the container.
 
 ## Behaviour notes
 
