@@ -15,9 +15,11 @@ services:
       SYNC_CRON: "0 3 * * *"
       HC_DISCOVERY_URL: "${HC_DISCOVERY_URL:-}"
       HC_SYNC_URL: "${HC_SYNC_URL:-}"
+      BACKUP_KEEP: "7"
       DRY_RUN: "${DRY_RUN:-0}"
     volumes:
       - /srv/docker/yt-playlist-sync/config:/config   # local disk, NOT NFS (SQLite)
+      - /srv/docker/yt-playlist-sync/backup:/backup   # nightly database backups
       - /mnt/nas/media/yt-playlists:/data             # example path of the target share
     ports:
       - "8048:8048"

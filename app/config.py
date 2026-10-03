@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     hc_sync_url: str = ""
     log_level: str = "INFO"
     log_retention_days: int = 30
+    backup_dir: Path = Path("/backup")
+    backup_keep: int = 7
     dry_run: bool = False
 
     @field_validator("discovery_cron", "sync_cron", "ytdlp_update_cron")
@@ -60,6 +62,8 @@ class Settings(BaseSettings):
     def _check_sleep(self) -> Settings:
         if self.sleep_min > self.sleep_max:
             raise ValueError("SLEEP_MIN must be <= SLEEP_MAX")
+        if self.backup_keep < 0:
+            raise ValueError("BACKUP_KEEP must be >= 0")
         return self
 
     @property

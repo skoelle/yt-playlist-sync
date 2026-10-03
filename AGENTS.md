@@ -15,7 +15,7 @@
 
 ```
 FastAPI (app/main.py, Lifespan)
-├── Scheduler (app/scheduler.py, APScheduler): Discovery, Nachtsync, yt-dlp-Update, Log-Cleanup
+├── Scheduler (app/scheduler.py, APScheduler): Discovery, Nachtsync, yt-dlp-Update, Log-Cleanup, DB-Backup 0:30
 ├── Job-Queue (app/jobqueue.py): genau 1 Worker, DB-backed, Prioritäten, Recovery, Cancel, 429-Pause
 │     └── Runner (app/runner.py): 1 yt-dlp-Subprozess, ohne DB-Zugriff
 │           └── ytdlp.py: URLs, Kommandobau, Output-Parser, Evaluate (rein, testbar)
@@ -29,6 +29,7 @@ FastAPI (app/main.py, Lifespan)
 | `app/config.py` | `Settings` (pydantic-settings), ENV-Validierung (Cron, TZ, Sleep), Pfade, `data_writable()` |
 | `app/db.py` | Engine-Init (Global!), WAL-PRAGMAs, `session_scope()`, `utcnow()` (naives UTC), `migrate()` |
 | `app/models.py` | `Playlist`, `Job`, `Run` + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
+| `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `sqlite_path`, Integritätscheck, Rotation `BACKUP_KEEP` |
 | `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url` |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
 | `app/runner.py` | `RunParams`/`RunResult`, `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit-Erkennung |
@@ -71,13 +72,13 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **34 Tests grün** (`pytest -q`, ~5 s).
+- Bestehender Stand: **48 Tests grün** (`pytest -q`, ~5 s).
 
 ## Harte Regeln
 
 Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
-1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`) und Temp-Dateien in Temporärverzeichnissen.
+1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_db`) und Temp-Dateien in Temporärverzeichnissen.
 2. **Ein Worker.** Niemals Parallelität von Downloads einführen (ein offener Job pro Playlist, `PRIORITY`-Map: manual/retry/full_rerun=0 > discovery=1 > nightly=2).
 3. **Keine privaten Daten im Repo.** Nur Platzhalter (`@beispielkanal`, `example-user`, leere HC-URLs). `.env` bleibt in `.gitignore`.
 4. **Kein YouTube-Login, keine Secrets, kein API-Key.** `DATABASE_URL` und Healthchecks-URLs sind Deployment-Detail.
@@ -111,7 +112,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (34), `ruff check .` meldet **8× E501** (Zeilen > 110, 3× in `app/`, 5× in `tests/`) – beim nächsten Durchgang zuerst aufräumen.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (48), `ruff check .` sauber.
 - Offen laut PLAN.md: erster vollständiger CI-Lauf mit installierten Abhängigkeiten, `docker build`, manuelle Läufe gegen echtes YouTube, GHCR-Package auf „public“, diverse fehlende Tests (Healthchecks-Mock, Cron/Zeitumstellung, „nie zwei Jobs parallel“, Neustart, Log-Offset).
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 

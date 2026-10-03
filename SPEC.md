@@ -83,6 +83,7 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 | `HC_DISCOVERY_URL` / `HC_SYNC_URL` | leer | Healthchecks Ping-URLs |
 | `DRY_RUN` | `0` | `1` = nur auflisten und simulieren |
 | `LOG_LEVEL` / `LOG_RETENTION_DAYS` | `INFO` / `30` | Logging, Aufräumen alter Job-Logs (nie Videos) |
+| `BACKUP_DIR` / `BACKUP_KEEP` | `/backup` / `7` | Zielverzeichnis der DB-Backups, Anzahl Kopien (`0` = unbegrenzt) |
 
 Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht ins Repo.
 
@@ -152,6 +153,15 @@ yt-dlp \
 
 ### 6.8 Dateirechte
 Der Entrypoint legt einen Benutzer mit `PUID`/`PGID` an und startet per `gosu`. Ist `/data` nicht beschreibbar, zeigt die UI ein rotes Banner und Downloads pausieren.
+
+### 6.9 DB-Backup (nächtlich 0:30)
+- Täglich um `0:30` (Zeitzone = `TZ`) sichert der Scheduler die SQLite-Datenbank nach `BACKUP_DIR`, Dateiname `app-YYYYMMDD-HHMMSS.db` (Lokalzeit).
+- Umsetzung über die `sqlite3`-Backup-API der Stdlib, nicht per Dateikopie: bei laufendem Betrieb (WAL-Mode) liefert sie einen konsistenten Snapshot inklusive WAL-Inhalt, und die Kopie ist eine standalone DB ohne `-wal`-Sidecar.
+- Jede Kopie wird per `PRAGMA integrity_check` geprüft; bei Fehlern wird geloggt und die Datei liegen gelassen.
+- Rotation: von den eigenen Dateien im Namensmuster bleiben die neuesten `BACKUP_KEEP` (Default 7, `0` = unbegrenzt), ältere Kopien werden gelöscht. Gelöscht werden ausschließlich diese Backup-Dateien – nie Videos, Archive oder DB-Einträge.
+- Nur SQLite: bei einem `DATABASE_URL` auf MariaDB wird der Lauf übersprungen und geloggt (MariaDB-Backup läuft über `mysqldump`, siehe 4.1).
+- Fehler (Verzeichnis nicht beschreibbar, Quelldatei fehlt) werden geloggt; der Dienst läuft weiter, kein Crash.
+- **Restore:** Container stoppen, `app.db` durch die Backup-Datei ersetzen, danebenliegende alte `app.db-wal`/`app.db-shm` entfernen, Container starten.
 
 ## 7. Datenmodell
 
