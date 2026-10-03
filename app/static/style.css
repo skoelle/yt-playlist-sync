@@ -67,6 +67,7 @@ code { font:12px/1.4 ui-monospace, monospace; background:var(--bg); padding:1px 
 a.vid-play { color:inherit; text-decoration:none; display:block; cursor:pointer; }
 a.vid-play:hover .vid-title, .vid-title a:hover { color:var(--accent); }
 .vid-meta { color:var(--muted); font-size:12px; margin-top:2px; }
+.vid-tech { color:var(--muted); font-size:11px; margin-top:1px; }
 .vid-chips { margin-top:4px; }
 .vid-chips code { font-size:11px; color:var(--muted); background:none; border:1px solid var(--line);
                   padding:0 4px; }
