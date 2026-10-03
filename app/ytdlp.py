@@ -304,6 +304,26 @@ def _find_cover(names: list[str], playlist_id: str) -> str | None:
     return None
 
 
+def _resolution(info: dict[str, Any]) -> str | None:
+    """``1080x1080`` from the merged format, or None if incomplete."""
+    w, h = info.get("width"), info.get("height")
+    if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
+        return f"{int(w)}x{int(h)}"
+    return None
+
+
+def _codec(info: dict[str, Any], key: str) -> str | None:
+    """Codec name; yt-dlp sets the unused stream of a merged format to 'none'."""
+    v = info.get(key)
+    return v if isinstance(v, str) and v and v != "none" else None
+
+
+def _bitrate(info: dict[str, Any], key: str) -> float | None:
+    """Bitrate in kbps from the merged format."""
+    v = info.get(key)
+    return float(v) if isinstance(v, (int, float)) and v > 0 else None
+
+
 def read_video_entries(folder: Path | str, playlist_id: str) -> dict[str, Any]:
     """Parse a yt-dlp playlist folder into a cover plus per-video gallery entries.
 
@@ -346,6 +366,11 @@ def read_video_entries(folder: Path | str, playlist_id: str) -> dict[str, Any]:
             "view_count": info.get("view_count"),
             "like_count": info.get("like_count"),
             "channel": info.get("channel") or info.get("uploader"),
+            "resolution": _resolution(info),
+            "vcodec": _codec(info, "vcodec"),
+            "acodec": _codec(info, "acodec"),
+            "vbr": _bitrate(info, "vbr"),
+            "abr": _bitrate(info, "abr"),
             "size_bytes": size, "sidecars": sidecars,
         })
     entries.sort(key=lambda e: (e["index"], e["file"]))

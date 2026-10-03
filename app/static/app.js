@@ -218,9 +218,17 @@ function videoRow(v) {
   if (v.view_count != null) meta.push(fmtViews(v.view_count));
   const chips = (v.sidecars || []).map((s) => `<code>${esc(s)}</code>`).join(" ");
   const play = `data-action="play" data-file="${esc(v.file)}"`;
+  const tech = [];
+  if (v.resolution) tech.push(v.resolution);
+  if (v.size_bytes) tech.push(fmtBytes(v.size_bytes));
+  if (v.vcodec) tech.push(v.vbr ? `${v.vcodec} · ${Math.round(v.vbr)} kbps` : v.vcodec);
+  if (v.acodec) tech.push(v.abr ? `${v.acodec} · ${Math.round(v.abr)} kbps` : v.acodec);
+  const techHtml = tech.length
+    ? `<div class="vid-tech">${tech.map(esc).join(" · ")}</div>` : "";
   return `<td class="vid-td-thumb"><a class="vid-play" ${play}>${thumb}${dur}</a></td>
     <td><div class="vid-title"><a class="vid-play" ${play}>${esc(v.title)}</a></div>
     <div class="vid-meta">${meta.map(esc).join(" · ")}</div>
+    ${techHtml}
     <div class="vid-chips">${chips}</div></td>`;
 }
 

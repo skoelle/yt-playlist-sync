@@ -107,17 +107,24 @@ def test_read_video_entries(tmp_path):
     (folder / "01 - No Son [nAUaWGdv6So].info.json").write_text(_json.dumps({
         "title": "No Son", "duration": 79, "upload_date": "20251127",
         "view_count": 3816, "like_count": 56, "channel": "Excide - Topic",
+        "width": 1080, "height": 1080, "vcodec": "av01.0.08M.08", "vbr": 401.524,
+        "acodec": "opus", "abr": 122.52,
     }))
     (folder / "02 - Second Song [abcdefghijk].mp4").write_bytes(b"v")
     (folder / "02 - Second Song [abcdefghijk].info.json").write_text("{broken json")
+    (folder / "03 - No Streams [ABCDEFGHIJK].mkv").write_bytes(b"v")
+    (folder / "03 - No Streams [ABCDEFGHIJK].info.json").write_text(_json.dumps({
+        "title": "No Streams", "duration": 10, "vcodec": "none", "acodec": "none",
+        "vbr": 0, "width": None, "height": 1080,
+    }))
 
     out = ytdlp.read_video_entries(folder, "PLABC1234567")
     assert out["exists"] is True
     assert out["cover"] == "00 - Setlist [LIVE] Mix [PLABC1234567].jpg"
-    assert out["video_count"] == 2
-    assert out["total_duration_s"] == 79
+    assert out["video_count"] == 3
+    assert out["total_duration_s"] == 89
 
-    first, second = out["videos"]
+    first, second, third = out["videos"]
     assert first["index"] == 1 and first["video_id"] == "nAUaWGdv6So"
     assert first["title"] == "No Son" and first["file"] == "01 - No Son [nAUaWGdv6So].mkv"
     assert first["thumb"] == "01 - No Son [nAUaWGdv6So].jpg"
@@ -126,9 +133,18 @@ def test_read_video_entries(tmp_path):
     assert first["channel"] == "Excide - Topic" and first["size_bytes"] == 10
     assert "mkv" in first["sidecars"] and "jpg" in first["sidecars"]
     assert "info.json" in first["sidecars"] and "description" in first["sidecars"]
+    # technical metadata from the merged format
+    assert first["resolution"] == "1080x1080"
+    assert first["vcodec"] == "av01.0.08M.08" and first["vbr"] == 401.524
+    assert first["acodec"] == "opus" and first["abr"] == 122.52
     # broken info.json falls back to the file name
     assert second["title"] == "Second Song" and second["duration_s"] is None
     assert second["thumb"] is None and second["size_bytes"] == 1
+    assert second["resolution"] is None and second["vcodec"] is None
+    # 'none' codecs and zero bitrate are dropped
+    assert third["vcodec"] is None and third["acodec"] is None
+    assert third["vbr"] is None and third["abr"] is None
+    assert third["resolution"] is None
 
     # cover fallback: playlist id mismatch still finds the 00-*.jpg
     assert ytdlp.read_video_entries(folder, "PLNOMATCH")["cover"].startswith("00 - ")
