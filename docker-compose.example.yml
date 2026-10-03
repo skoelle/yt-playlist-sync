@@ -1,0 +1,25 @@
+# Example only. Replace the placeholders with your own values and keep real
+# values (channel, ping URLs, paths) out of the public repository (.env is git-ignored).
+services:
+  yt-playlist-sync:
+    image: ghcr.io/example-user/yt-playlist-sync:latest
+    container_name: yt-playlist-sync
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Berlin
+      PUID: "1000"
+      PGID: "1000"
+      YOUTUBE_CHANNEL: "${YOUTUBE_CHANNEL:-@beispielkanal}"
+      ONESHOT_KEYWORD: "setlist"
+      DISCOVERY_CRON: "0 * * * *"
+      SYNC_CRON: "0 3 * * *"
+      HC_DISCOVERY_URL: "${HC_DISCOVERY_URL:-}"
+      HC_SYNC_URL: "${HC_SYNC_URL:-}"
+      DRY_RUN: "${DRY_RUN:-0}"
+    volumes:
+      - /srv/docker/yt-playlist-sync/config:/config   # local disk, NOT NFS (SQLite)
+      - <nas>/media/yt-playlists:/data             # example path of the target share
+    ports:
+      - "8048:8048"
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
