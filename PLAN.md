@@ -4,9 +4,8 @@ Umsetzungsplan mit Status. Grundlage ist `SPEC.md`. Abweichungen stehen im Entsc
 
 ## Umsetzungsstatus
 
-- **Ausgeführt und grün (Sandbox ohne Internet):** 22 Tests für `paths`, `ytdlp` und `runner` gegen den yt-dlp-Stub. `app.js` besteht `node --check`. Alle Python-Dateien kompilieren.
-- **Geschrieben und grün:** alle Tests laufen mit installierten Abhängigkeiten (`pytest -q` = 48 grün, `ruff check .` sauber, `node --check` ok), CI-Lauf inklusive.
-- **Nicht geschriebene Tests:** Healthchecks-Mock, Cron-Berechnung, "nie zwei Jobs gleichzeitig", Neustart-Simulation, Log-Offset, Docker-Laufzeittests.
+- **Abgeschlossen:** alle Phasen abgenommen (0 bis 6), `pytest -q` = **51 grün**, `ruff check .` sauber, `node --check` ok, CI-Lauf inklusive.
+- **Offene Tests (niedrige Prio):** Healthchecks-Mock, Cron-Berechnung/Zeitumstellung, Docker-Laufzeittests.
 
 ## Regeln für den Agenten
 
@@ -97,7 +96,7 @@ Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Erfüllt (public).**
 
 ## Definition of Done
 
-- [ ] Phasen 0 bis 6 vollständig abgenommen
+- [x] Phasen 0 bis 6 vollständig abgenommen
 - [x] Image `latest` auf GHCR, öffentlich, amd64
 - [x] README (Englisch), LICENSE (MIT), SPEC.md und PLAN.md im Repo
 - [x] Keine privaten Daten im Repo (Platzhalter `example-user`, `@beispielkanal`)
