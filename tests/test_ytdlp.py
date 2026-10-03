@@ -7,7 +7,9 @@ from app import ytdlp
 
 def test_channel_urls():
     assert ytdlp.channel_playlists_url("@beispielkanal") == "https://www.youtube.com/@beispielkanal/playlists"
-    assert ytdlp.channel_playlists_url("UC" + "a" * 22) == f"https://www.youtube.com/channel/UC{'a' * 22}/playlists"
+    assert ytdlp.channel_playlists_url("UC" + "a" * 22) == (
+        f"https://www.youtube.com/channel/UC{'a' * 22}/playlists"
+    )
     assert ytdlp.channel_playlists_url("https://www.youtube.com/@x/") == "https://www.youtube.com/@x/playlists"
     assert ytdlp.channel_playlists_url("https://www.youtube.com/@x/playlists").count("playlists") == 1
     assert ytdlp.channel_playlists_url("beispiel") == "https://www.youtube.com/@beispiel/playlists"
@@ -35,7 +37,10 @@ def test_parse_line_events():
         "type": "progress", "percent": 42.5, "speed": "1.2MiB/s", "eta": "00:10"}
     assert ytdlp.parse_line("[download] Downloading item 2 of 7") == {"type": "item", "index": 2, "total": 7}
     assert ytdlp.parse_line("[download] Destination: /data/x/01 - A [abc].mp4")["name"] == "01 - A [abc].mp4"
-    assert ytdlp.parse_line("[youtube] abcdefghijk: Downloading webpage") == {"type": "video", "id": "abcdefghijk"}
+    assert ytdlp.parse_line("[youtube] abcdefghijk: Downloading webpage") == {
+        "type": "video",
+        "id": "abcdefghijk",
+    }
     assert ytdlp.parse_line("some other line") is None
 
 

@@ -121,7 +121,11 @@ class JobQueue:
         """Wait until all given jobs have left the queued/running state."""
         while True:
             with session_scope() as s:
-                rows = s.execute(select(Job.id, Job.status).where(Job.id.in_(job_ids))).all() if job_ids else []
+                rows = (
+                    s.execute(select(Job.id, Job.status).where(Job.id.in_(job_ids))).all()
+                    if job_ids
+                    else []
+                )
             statuses = {r[0]: r[1] for r in rows}
             if all(st not in ("queued", "running") for st in statuses.values()):
                 return statuses

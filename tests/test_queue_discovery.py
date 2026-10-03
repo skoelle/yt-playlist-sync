@@ -38,7 +38,9 @@ def playlists():
 
 
 def test_apply_discovery_types_rename_and_removal(cfg):
-    stats = apply_discovery([PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist 2024")], "setlist")
+    stats = apply_discovery(
+        [PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist 2024")], "setlist"
+    )
     assert stats.new == 2 and len(stats.to_enqueue) == 2
     assert playlists()["PL1"][0] == "sync" and playlists()["PL2"][0] == "oneshot"
     stats = apply_discovery([PlaylistInfo("PL1", "Winter Setlist")], "setlist")
