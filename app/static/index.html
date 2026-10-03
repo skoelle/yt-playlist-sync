@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>yt-playlist-sync</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>yt-playlist-sync</h1>
+  <nav>
+    <a href="#status" data-tab="status">Status</a>
+    <a href="#sync" data-tab="sync">Sync-Playlists</a>
+    <a href="#oneshot" data-tab="oneshot">Oneshot-Playlists</a>
+  </nav>
+</header>
+<div id="banners"></div>
+<main>
+  <section id="tab-status" data-tab="status">
+    <div class="cards">
+      <div class="card">
+        <h2>Aktueller Job</h2>
+        <div id="current-empty" class="muted">Kein Job aktiv.</div>
+        <div id="current-box" hidden>
+          <div><strong id="cur-title"></strong></div>
+          <div class="muted" id="cur-item"></div>
+          <div class="bar"><div id="cur-bar"></div></div>
+          <div class="muted" id="cur-meta"></div>
+          <div class="actions">
+            <button data-action="show-current-log">Log anzeigen</button>
+            <button data-action="cancel-current" class="danger">Abbrechen</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Zeitpläne</h2>
+        <table class="kv">
+          <tr><th>Discovery zuletzt</th><td id="sch-d-last"></td></tr>
+          <tr><th>Discovery nächster</th><td id="sch-d-next"></td></tr>
+          <tr><th>Nachtsync zuletzt</th><td id="sch-s-last"></td></tr>
+          <tr><th>Nachtsync nächster</th><td id="sch-s-next"></td></tr>
+        </table>
+        <div class="actions">
+          <button data-action="discovery-now">Discovery jetzt</button>
+          <button data-action="sync-now">Sync jetzt</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>System</h2>
+        <table class="kv">
+          <tr><th>Kanal</th><td id="sys-channel"></td></tr>
+          <tr><th>yt-dlp</th><td id="sys-ytdlp"></td></tr>
+          <tr><th>Freier Platz</th><td id="sys-free"></td></tr>
+          <tr><th>Warteschlange</th><td id="sys-queue"></td></tr>
+        </table>
+      </div>
+    </div>
+    <div id="log-panel" class="card" hidden>
+      <h2>Log <span id="log-title" class="muted"></span> <button data-action="close-log">Schließen</button></h2>
+      <pre id="log-pre"></pre>
+    </div>
+    <h2>Letzte Jobs</h2>
+    <div class="table-wrap">
+    <table id="jobs-table">
+      <thead><tr><th>#</th><th>Playlist</th><th>Trigger</th><th>Status</th><th>Dauer</th><th>Neu</th><th>Übersprungen</th><th>Fehler</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="tab-sync" data-tab="sync" hidden>
+    <p class="muted">Playlists ohne Schlüsselwort. Sie werden einmal pro Nacht synchronisiert.</p>
+    <div class="table-wrap">
+    <table id="sync-table">
+      <thead><tr><th>Titel</th><th>Videos</th><th>Größe</th><th>Letzter Sync</th><th>Nächster Sync</th><th>Status</th><th>Aktionen</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="tab-oneshot" data-tab="oneshot" hidden>
+    <p class="muted" id="oneshot-summary"></p>
+    <div class="table-wrap">
+    <table id="oneshot-table">
+      <thead><tr>
+        <th data-sort="title">Titel</th><th data-sort="date">Heruntergeladen am</th>
+        <th data-sort="songs">Songs</th><th data-sort="size">Größe</th>
+        <th data-sort="duration">Dauer</th><th data-sort="state">Status</th><th>Aktionen</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </section>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
