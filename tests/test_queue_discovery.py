@@ -127,3 +127,32 @@ def test_cancel_queued_job(cfg):
     assert queue.cancel(jid) is True
     assert playlists()["PLx"][1] == "failed"
     assert queue.cancel(99999) is False
+
+
+def test_single_worker_never_runs_two_jobs(cfg, stub):
+    """Harte Regel: genau ein Job zur Zeit – nie zwei yt-dlp-Prozesse parallel."""
+    stub.data_ref["slow"] = 0.4
+    stub.save()
+
+    async def scenario():
+        queue = JobQueue(cfg)
+        await queue.start()
+        await run_discovery(cfg, queue)
+        with session_scope() as s:
+            ids = list(s.scalars(select(Job.id).order_by(Job.id)).all())
+        assert len(ids) == 2
+        seen_running = False
+        for _ in range(200):  # up to ~10 s, covers both jobs end to end
+            with session_scope() as s:
+                statuses = [s.get(Job, j).status for j in ids]
+            running = statuses.count("running")
+            assert running <= 1, f"two jobs running at once: {statuses}"
+            seen_running = seen_running or running == 1
+            if all(st in ("success", "failed") for st in statuses):
+                break
+            await asyncio.sleep(0.05)
+        assert seen_running, "no job ever entered the running state"
+        await queue.wait_for_jobs(ids, poll=0.2)
+        await queue.stop()
+
+    asyncio.run(scenario())

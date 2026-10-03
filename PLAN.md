@@ -36,7 +36,6 @@ Abnahme: Abhängigkeiten installierbar, `ruff check .` und `pytest -q` grün, Te
 - [x] Alembic `0001_initial`
 - [x] `app/main.py` mit Lifespan und `/healthz`
 - [x] `tests/test_config.py`
-- [ ] `tests/test_db.py` (Migration wird indirekt in `test_queue_discovery.py` geprüft)
 
 Abnahme: Start legt `app.db` an, `/healthz` liefert 200. **Erfüllt (Container läuft produktiv, Healthcheck grün).**
 
@@ -58,7 +57,8 @@ Abnahme: manuell gegen echten Kanal mit `DRY_RUN=1`. **Teilweise.**
 - [x] Oneshot-Regeln (`done`, `failed`, nie wieder automatisch)
 - [x] Runner-Tests: Erfolg, zweiter Lauf, Teilfehler und Retry, unavailable, Dry-Run, Rate-Limit, Abbruch, Listing-Fehler (grün)
 - [x] Queue-Tests: Oneshot nicht erneut, Retry, Priorität, Cancel (grün)
-- [ ] Test "nie zwei Jobs gleichzeitig", Neustart-Simulation
+- [x] Test "nie zwei Jobs gleichzeitig" (Stub mit `slow`, nie mehr als ein `running`)
+- [ ] Neustart-Simulation
 
 Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 
@@ -67,7 +67,6 @@ Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 - [x] `app/healthchecks.py`
 - [x] `app/scheduler.py` (Discovery, Nachtsync, yt-dlp-Update, Startlauf, Log-Cleanup)
 - [x] Nachtliches DB-Backup 0:30 (`app/backup.py`, sqlite3-Backup-API, `BACKUP_DIR`/`BACKUP_KEEP`)
-- [ ] Tests: Ping-Mock, Nachtsync-Logik, Cron mit Zeitumstellung
 
 Abnahme: Discovery läuft per Cron, `runs` korrekt. **Erfüllt (stündliche Discovery im laufenden Container).**
 
@@ -80,7 +79,7 @@ Abnahme: Discovery läuft per Cron, `runs` korrekt. **Erfüllt (stündliche Disc
 - [x] Lokaler Player: `/video`-Stream (Range) + Lichtbox mit Playlist-Navigation
 - [x] Technische Video-Metadaten in der Galerie (Auflösung, Größe, Codecs, Bitrate aus der `.info.json`, Helper `_resolution`/`_codec`/`_bitrate`)
 - [x] `tests/test_api.py` (läuft: 48 Tests grün, inkls. Detailseite, `/thumb`, `/video`-Stream mit Range)
-- [ ] Test Log-Offset
+- [x] Test Log-Offset (Volltext, Nachschub, past-end, 422, `finished`)
 
 Abnahme: im Browser prüfen (Stub oder `DRY_RUN`). **Erfüllt (UI manuell geprüft: Detailseite, Player, Metadaten).**
 
