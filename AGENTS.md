@@ -30,14 +30,14 @@ FastAPI (app/main.py, Lifespan)
 | `app/db.py` | Engine-Init (Global!), WAL-PRAGMAs, `session_scope()`, `utcnow()` (naives UTC), `migrate()` |
 | `app/models.py` | `Playlist`, `Job`, `Run` + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
 | `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `sqlite_path`, Integritätscheck, Rotation `BACKUP_KEEP` |
-| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url` |
+| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url`, `read_video_entries` (Galerie inkl. Tech-Metadaten) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
 | `app/runner.py` | `RunParams`/`RunResult`, `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit-Erkennung |
 | `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States |
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen), `run_discovery` mit Leerlistenschutz |
 | `app/scheduler.py` | Cron-Jobs, Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
-| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln |
+| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
 
 Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py`.
@@ -53,15 +53,15 @@ python3 -m venv .venv
 .venv/bin/pytest -q
 .venv/bin/ruff check .
 
-# Dev-Server (DRY_RUN verhindert echte Downloads)
-.venv/bin/uvicorn app.main:app --reload --port 8080
+# Dev-Server (DRY_RUN verhindert echte Downloads; Port wie README/start-dev.sh)
+.venv/bin/uvicorn app.main:app --reload --port 8048
 ```
 
 Dev-Start mit lokalen Pfaden:
 
 ```bash
 DATA_DIR=./.dev/data CONFIG_DIR=./.dev/config DRY_RUN=1 \
-YOUTUBE_CHANNEL=@beispielkanal .venv/bin/uvicorn app.main:app --reload --port 8080
+YOUTUBE_CHANNEL=@beispielkanal .venv/bin/uvicorn app.main:app --reload --port 8048
 ```
 
 JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build -t ytsync .`
@@ -112,7 +112,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
-- `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes.
+- `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
 - Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (51), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
