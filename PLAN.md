@@ -79,7 +79,7 @@ Abnahme: Discovery läuft per Cron, `runs` korrekt. **Offen.**
 - [x] Detailseite (`GET /api/playlists/{id}`, `/files`, Hash `#playlist-{id}`, Titel-Links, globales Log-Panel)
 - [x] Detailseite: Cover + Videogalerie (`read_video_entries` mit info.json-Parse-Cache, `/thumb`-Endpunkt)
 - [x] Lokaler Player: `/video`-Stream (Range) + Lichtbox mit Playlist-Navigation
-- [x] `tests/test_api.py` (nicht ausgeführt)
+- [x] `tests/test_api.py` (läuft: 48 Tests grün, inkls. Detailseite, `/thumb`, `/video`-Stream mit Range)
 - [ ] Test Log-Offset
 
 Abnahme: im Browser prüfen (Stub oder `DRY_RUN`). **Offen.**
@@ -113,3 +113,6 @@ Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Offen.**
 - Alembic-Migration `0001` nutzt `Base.metadata.create_all`.
 - Der Test-Workflow ist wiederverwendbar (`workflow_call`), der Build ruft ihn vor dem Image-Build auf.
 - DB-Backup über die `sqlite3`-Backup-API statt `cp`: WAL-Mode macht reine Dateikopien unzuverlässig; die API liefert einen konsistenten Snapshot ohne `-wal`-Sidecar. Rotation mit glob-Namensmuster, nur eigene `app-*.db`-Dateien.
+- Compose-Beispiel zeigt die echte öffentliche Image-URL `ghcr.io/skoelle/yt-playlist-sync:latest` und Übergabe von `ONESHOT_KEYWORD` per Interpolation (wie `YOUTUBE_CHANNEL`), nicht mehr hartkodiert; README-Raw-URL entsprechend korrigiert.
+- `renovate.json` ergänzt: `config:recommended`, Schedule „before 6am on Monday", Gruppen für GitHub Actions (automerge), Docker/Docker Compose (manuell), Python dependencies (automerge).
+- `.moonweb.yml` für die Projektübersicht (category `code`, subcategory „Archiving Tools").

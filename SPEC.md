@@ -237,6 +237,8 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 10. Es wird nie eine Datei oder ein Archive-Eintrag gelöscht.
 11. Die Action baut ein amd64 Image, pusht `latest` und läuft wöchentlich ohne Cache.
 12. Die UI zeigt die yt-dlp Version.
+13. Die Detailseite zeigt Cover und Videogalerie; Klick auf ein Video spielt die lokale Datei (Hintergrund-Klick oder ESC schließt wieder).
+14. Nachts um 0:30 liegt ein per Integritätscheck geprüftes DB-Backup in `BACKUP_DIR`, alte Kopien rotieren nach `BACKUP_KEEP`.
 
 ## 13. Offene Punkte
 
@@ -254,3 +256,5 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Full Re-Run löscht nichts und prüft nur gegen das Archive.
 - yt-dlp-Update über `pip --target /config/ytdlp-lib`.
 - Alembic-Migration `0001` legt das Schema über `Base.metadata.create_all` an.
+- Neu: Playlist-Detailseite mit Cover, Video-Galerie und lokalem Player (`GET /videos`, `/thumb`, `/video`), Klick auf Hintergrund/ESC/Buttons schließt die Lichtbox.
+- Neu: Nächtliches SQLite-Backup um 0:30 nach `BACKUP_DIR` mit Rotation `BACKUP_KEEP` (siehe 6.9).
