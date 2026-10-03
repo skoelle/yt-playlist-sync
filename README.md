@@ -86,4 +86,4 @@ See [SPEC.md](SPEC.md) for the specification and [PLAN.md](PLAN.md) for the impl
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+Licensed under the [MIT License](LICENSE) - Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+# Licensed under the MIT License. See LICENSE file in project root for details.
 """Stand-in for yt-dlp used by the tests. Behaviour is driven by a JSON file (FAKE_YTDLP_DATA)."""
 import json
 import os

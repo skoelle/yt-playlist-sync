@@ -114,3 +114,9 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (34), `ruff check .` meldet **8× E501** (Zeilen > 110, 3× in `app/`, 5× in `tests/`) – beim nächsten Durchgang zuerst aufräumen.
 - Offen laut PLAN.md: erster vollständiger CI-Lauf mit installierten Abhängigkeiten, `docker build`, manuelle Läufe gegen echtes YouTube, GHCR-Package auf „public“, diverse fehlende Tests (Healthchecks-Mock, Cron/Zeitumstellung, „nie zwei Jobs parallel“, Neustart, Log-Offset).
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
+
+## License
+
+MIT License - Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+- Full text in `LICENSE`
+- License headers in all source code files
