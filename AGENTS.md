@@ -15,7 +15,7 @@
 
 ```
 FastAPI (app/main.py, Lifespan)
-├── Scheduler (app/scheduler.py, APScheduler): Discovery, Nachtsync, yt-dlp-Update, Log-Cleanup, DB-Backup 0:30
+├── Scheduler (app/scheduler.py, APScheduler): Discovery, Nachtsync, yt-dlp-Update, Log-Cleanup, Backups 0:30 (DB + Archive)
 ├── Job-Queue (app/jobqueue.py): genau 1 Worker, DB-backed, Prioritäten, Recovery, Cancel, 429-Pause
 │     └── Runner (app/runner.py): 1 yt-dlp-Subprozess, ohne DB-Zugriff
 │           └── ytdlp.py: URLs, Kommandobau, Output-Parser, Evaluate (rein, testbar)
@@ -29,7 +29,7 @@ FastAPI (app/main.py, Lifespan)
 | `app/config.py` | `Settings` (pydantic-settings), ENV-Validierung (Cron, TZ, Sleep), Pfade, `data_writable()` |
 | `app/db.py` | Engine-Init (Global!), WAL-PRAGMAs, `session_scope()`, `utcnow()` (naives UTC), `migrate()` |
 | `app/models.py` | `Playlist`, `Job`, `Run` + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
-| `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `sqlite_path`, Integritätscheck, Rotation `BACKUP_KEEP` |
+| `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `backup_archives` (tar.gz von `archives/`), `sqlite_path`, Integritätschecks, Rotation `BACKUP_KEEP` je Namensmuster |
 | `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url`, `read_video_entries` (Galerie inkl. Tech-Metadaten) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
 | `app/runner.py` | `RunParams`/`RunResult`, `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit-Erkennung |
@@ -72,13 +72,13 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **51 Tests grün** (`pytest -q`, ~12 s).
+- Bestehender Stand: **59 Tests grün** (`pytest -q`, ~12 s).
 
 ## Harte Regeln
 
 Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
-1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_db`) und Temp-Dateien in Temporärverzeichnissen.
+1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_run`) und Temp-Dateien in Temporärverzeichnissen.
 2. **Ein Worker.** Niemals Parallelität von Downloads einführen (ein offener Job pro Playlist, `PRIORITY`-Map: manual/retry/full_rerun=0 > discovery=1 > nightly=2).
 3. **Keine privaten Daten im Repo.** Nur Platzhalter (`@beispielkanal`, leere HC-URLs); die öffentliche Image-URL ist `ghcr.io/skoelle/yt-playlist-sync`. `.env` bleibt in `.gitignore`.
 4. **Kein YouTube-Login, keine Secrets, kein API-Key.** `DATABASE_URL` und Healthchecks-URLs sind Deployment-Detail.
@@ -113,7 +113,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (51), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (59), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

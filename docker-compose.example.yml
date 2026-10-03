@@ -19,7 +19,7 @@ services:
       DRY_RUN: "${DRY_RUN:-0}"
     volumes:
       - /srv/docker/yt-playlist-sync/config:/config   # local disk, NOT NFS (SQLite)
-      - /srv/docker/yt-playlist-sync/backup:/backup   # nightly database backups
+      - /srv/docker/yt-playlist-sync/backup:/backup   # nightly backups (database + download archives)
       - /mnt/nas/media/yt-playlists:/data             # example path of the target share
     ports:
       - "8048:8048"
