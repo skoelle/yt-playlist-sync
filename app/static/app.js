@@ -33,6 +33,17 @@ function fmtDur(s) {
   return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
 }
 function fmtAbs(iso) { return iso ? new Date(iso).toLocaleString("de-DE") : ""; }
+function fmtClock(s) {
+  s = Math.round(Number(s) || 0);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+function fmtUploadDate(s) {
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(String(s || ""));
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+}
+function fmtViews(n) { return Number(n).toLocaleString("de-DE") + " Aufrufe"; }
 function fmtRel(iso) {
   if (!iso) return "-";
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -194,12 +205,45 @@ function renderOneshots() {
   setText("oneshot-summary", `${state.oneshots.length} Setlists | ${songs} Songs | ${fmtBytes(size)}`);
 }
 
-function renderDetail(p, f) {
+function videoRow(v) {
+  const thumb = v.thumb
+    ? `<img class="vid-thumb" loading="lazy" alt="" src="/api/playlists/${state.detailId}/thumb?file=${encodeURIComponent(v.thumb)}">`
+    : `<div class="vid-thumb vid-thumb-empty"></div>`;
+  const dur = v.duration_s != null ? `<span class="vid-dur">${fmtClock(v.duration_s)}</span>` : "";
+  const meta = [];
+  if (v.channel) meta.push(v.channel);
+  const up = fmtUploadDate(v.upload_date);
+  if (up) meta.push(up);
+  if (v.view_count != null) meta.push(fmtViews(v.view_count));
+  const chips = (v.sidecars || []).map((s) => `<code>${esc(s)}</code>`).join(" ");
+  return `<td class="vid-td-thumb">${thumb}${dur}</td>
+    <td><div class="vid-title">${esc(v.title)}</div>
+    <div class="vid-meta">${meta.map(esc).join(" · ")}</div>
+    <div class="vid-chips">${chips}</div></td>`;
+}
+
+function renderDetail(p, f, vids) {
   $("#detail-back").href = "#" + state.detailFrom;
   setText("detail-title", p.title);
   const yt = $("#detail-yt");
   yt.href = p.url;
   yt.hidden = false;
+  const cover = $("#detail-cover");
+  const cv = vids.cover || "";
+  if (cover.dataset.cv !== cv) {
+    cover.dataset.cv = cv;
+    if (cv) {
+      cover.src = `/api/playlists/${p.id}/thumb?file=${encodeURIComponent(cv)}`;
+      cover.hidden = false;
+    } else {
+      cover.removeAttribute("src");
+      cover.hidden = true;
+    }
+  }
+  const stats = [`${vids.video_count} Videos`];
+  if (vids.total_duration_s > 0) stats.push(fmtClock(vids.total_duration_s));
+  stats.push(fmtBytes(f.exists ? f.total_bytes : p.size_bytes));
+  setText("detail-stats", stats.join(" · "));
   const badges = [badge(p.type), badge(p.state)];
   if (p.ignored) badges.push('<span class="badge">ignoriert</span>');
   if (p.remote_status === "removed") badges.push('<span class="badge s-failed">removed</span>');
@@ -247,6 +291,23 @@ function renderDetail(p, f) {
   const kvhtml = kv.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${v}</td></tr>`).join("");
   const kvbox = $("#detail-kv");
   if (kvbox._html !== kvhtml) { kvbox.innerHTML = kvhtml; kvbox._html = kvhtml; }
+
+  setText("detail-video-summary", `${vids.video_count} / ${p.remote_item_count ?? vids.video_count}`);
+  const vnone = $("#detail-videos-none");
+  const vwrap = $("#detail-videos-wrap");
+  if (!vids.exists) {
+    vnone.textContent = "Ordner existiert (noch) nicht – Videos erscheinen hier, sobald der erste Download lief.";
+    vnone.hidden = false;
+    vwrap.hidden = true;
+  } else if (!vids.video_count) {
+    vnone.textContent = "Keine Videodateien gefunden.";
+    vnone.hidden = false;
+    vwrap.hidden = true;
+  } else {
+    vnone.hidden = true;
+    vwrap.hidden = false;
+    syncRows($("#detail-videos-table tbody"), vids.videos, (x) => x.file, videoRow);
+  }
 
   if (!f.exists) {
     $("#detail-files-none").hidden = false;
@@ -307,12 +368,12 @@ async function tick() {
       renderOneshots();
     } else if (state.tab === "playlist") {
       const id = state.detailId;
-      const [pl, files] = await Promise.all([
-        api(`/playlists/${id}`), api(`/playlists/${id}/files`),
+      const [pl, files, vids] = await Promise.all([
+        api(`/playlists/${id}`), api(`/playlists/${id}/files`), api(`/playlists/${id}/videos`),
       ]);
       if (state.detailId !== id) return;
-      state.detail = { pl, files };
-      renderDetail(pl, files);
+      state.detail = { pl, files, vids };
+      renderDetail(pl, files, vids);
     }
     if (state.log.open) await pollLog();
   } catch (err) {

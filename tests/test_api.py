@@ -102,3 +102,45 @@ def test_playlist_detail_and_files(client):
         s.get(Playlist, pid).folder_name = "../../etc"
     files = client.get(f"/api/playlists/{pid}/files").json()
     assert files["exists"] is False and files["files"] == []
+
+
+def test_playlist_videos_and_thumb(client):
+    apply_discovery([PlaylistInfo("PL1", "Sommer Mix")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+
+    # no folder yet
+    v = client.get(f"/api/playlists/{pid}/videos").json()
+    assert v["exists"] is False and v["videos"] == [] and v["cover"] is None
+
+    name = sanitize_folder_name("Sommer Mix", "PL1")
+    with session_scope() as s:
+        s.get(Playlist, pid).folder_name = name
+    d = client.app.state.settings.data_dir / name
+    d.mkdir(parents=True)
+    (d / "00 - Sommer Mix [PL1].jpg").write_bytes(b"cover")
+    (d / "01 - Song [nAUaWGdv6So].mkv").write_bytes(b"video-bytes")
+    (d / "01 - Song [nAUaWGdv6So].jpg").write_bytes(b"thumb-bytes")
+    (d / "01 - Song [nAUaWGdv6So].info.json").write_text(
+        '{"title": "Song", "duration": 61, "channel": "Kanal"}')
+
+    v = client.get(f"/api/playlists/{pid}/videos").json()
+    assert v["exists"] is True
+    assert v["cover"] == "00 - Sommer Mix [PL1].jpg"
+    assert v["video_count"] == 1 and v["total_duration_s"] == 61
+    entry = v["videos"][0]
+    assert entry["title"] == "Song" and entry["duration_s"] == 61
+    assert entry["thumb"] == "01 - Song [nAUaWGdv6So].jpg"
+    assert entry["size_bytes"] == 11
+
+    # thumbnail: ok, whitelist, traversal, unknown
+    r = client.get(f"/api/playlists/{pid}/thumb", params={"file": "01 - Song [nAUaWGdv6So].jpg"})
+    assert r.status_code == 200 and r.content == b"thumb-bytes"
+    assert r.headers["content-type"].startswith("image/")
+    assert "cache-control" in r.headers
+    r = client.get(f"/api/playlists/{pid}/thumb", params={"file": "00 - Sommer Mix [PL1].jpg"})
+    assert r.status_code == 200 and r.content == b"cover"
+    bad = ["01 - Song [nAUaWGdv6So].mkv", "../../app.py", "missing.jpg", "", "x.EXE"]
+    for f in bad:
+        assert client.get(f"/api/playlists/{pid}/thumb", params={"file": f}).status_code == 404, f
+    assert client.get("/api/playlists/9999/videos").status_code == 404
+    assert client.get("/api/playlists/9999/thumb", params={"file": "a.jpg"}).status_code == 404
