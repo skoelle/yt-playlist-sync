@@ -11,12 +11,13 @@ pytest.importorskip("pydantic_settings")
 pytest.importorskip("apscheduler")
 
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import select  # noqa: E402
 
 from app.config import Settings  # noqa: E402
-from app.db import session_scope  # noqa: E402
+from app.db import session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import Playlist  # noqa: E402
+from app.models import Job, Playlist  # noqa: E402
 from app.paths import sanitize_folder_name  # noqa: E402
 from app.ytdlp import PlaylistInfo  # noqa: E402
 
@@ -176,3 +177,38 @@ def test_playlist_video_stream(client):
     for file in bad:
         assert client.get(f"/api/playlists/{pid}/video", params={"file": file}).status_code == 404, file
     assert client.get("/api/playlists/9999/video", params={"file": f}).status_code == 404
+
+
+def test_job_log_offset(client, tmp_path):
+    apply_discovery([PlaylistInfo("PL1", "Sommer Mix")], "setlist")
+    log_file = tmp_path / "job.log"
+    log_file.write_bytes(b"line1\nline2\nline3")
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id))
+        job = Job(playlist_id=pk, trigger="manual", status="running",
+                  queued_at=utcnow(), log_path=str(log_file))
+        s.add(job)
+        s.flush()
+        jid = job.id
+
+    # full text on the first call
+    r = client.get(f"/api/jobs/{jid}/log", params={"offset": 0}).json()
+    assert r["text"] == "line1\nline2\nline3" and r["offset"] == 17
+    assert r["finished"] is False
+    # nothing new yet
+    r = client.get(f"/api/jobs/{jid}/log", params={"offset": 17}).json()
+    assert r["text"] == "" and r["offset"] == 17
+    # appended lines are delivered exactly once from the offset
+    with open(log_file, "ab") as fh:
+        fh.write(b"line4\n")
+    r = client.get(f"/api/jobs/{jid}/log", params={"offset": 17}).json()
+    assert r["text"] == "line4\n" and r["offset"] == 23
+    # offset past the end is valid and returns nothing
+    r = client.get(f"/api/jobs/{jid}/log", params={"offset": 9999}).json()
+    assert r["text"] == "" and r["offset"] == 9999
+    # negative offsets are rejected
+    assert client.get(f"/api/jobs/{jid}/log", params={"offset": -1}).status_code == 422
+    # finished flag follows the job status
+    with session_scope() as s:
+        s.get(Job, jid).status = "success"
+    assert client.get(f"/api/jobs/{jid}/log", params={"offset": 0}).json()["finished"] is True
