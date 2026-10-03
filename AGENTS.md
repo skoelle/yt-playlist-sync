@@ -105,6 +105,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
 - `.github/workflows/test.yml`: `ruff check .` + `pytest -q`, Python 3.12 – bei Push außerhalb `main`, Pull Requests, und per `workflow_call`.
 - `.github/workflows/build.yml`: ruft zuerst `test.yml`, dann Build `linux/amd64`, Tag nur `latest`, Push nach `ghcr.io/<owner>/yt-playlist-sync`, wöchentlich ohne Cache (Montag 04:17 UTC).
+- `renovate.json`: Updates wöchentlich (vor 6 Uhr Montag), Minor/Patch automerge, Major mit Label `major-update`; Gruppen für Actions, Docker/Compose und Python.
 - Nach einer Änderung immer `ruff check .` und `pytest -q` laufen lassen, bevor etwas als fertig gemeldet wird.
 
 ## Dokumentation und Stand
