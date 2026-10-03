@@ -114,7 +114,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes.
 - Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (48), `ruff check .` sauber.
-- Offen laut PLAN.md: erster vollständiger CI-Lauf mit installierten Abhängigkeiten, `docker build`, manuelle Läufe gegen echtes YouTube, GHCR-Package auf „public“, diverse fehlende Tests (Healthchecks-Mock, Cron/Zeitumstellung, „nie zwei Jobs parallel“, Neustart, Log-Offset).
+- Offen laut PLAN.md: diverse fehlende Tests (Healthchecks-Mock, Cron/Zeitumstellung, „nie zwei Jobs parallel“, Neustart, Log-Offset).
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License
