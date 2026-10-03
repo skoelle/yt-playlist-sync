@@ -19,7 +19,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 ```bash
 mkdir -p /srv/docker/yt-playlist-sync/config
 cd /srv/docker/yt-playlist-sync
-curl -O https://raw.githubusercontent.com/example-user/yt-playlist-sync/main/docker-compose.example.yml
+curl -O https://raw.githubusercontent.com/skoelle/yt-playlist-sync/main/docker-compose.example.yml
 mv docker-compose.example.yml docker-compose.yml
 vim docker-compose.yml        # set the volume paths
 vim .env                      # YOUTUBE_CHANNEL=@yourchannel, optional HC_* URLs

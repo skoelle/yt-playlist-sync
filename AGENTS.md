@@ -80,7 +80,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
 1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_db`) und Temp-Dateien in Temporärverzeichnissen.
 2. **Ein Worker.** Niemals Parallelität von Downloads einführen (ein offener Job pro Playlist, `PRIORITY`-Map: manual/retry/full_rerun=0 > discovery=1 > nightly=2).
-3. **Keine privaten Daten im Repo.** Nur Platzhalter (`@beispielkanal`, `example-user`, leere HC-URLs). `.env` bleibt in `.gitignore`.
+3. **Keine privaten Daten im Repo.** Nur Platzhalter (`@beispielkanal`, leere HC-URLs); die öffentliche Image-URL ist `ghcr.io/skoelle/yt-playlist-sync`. `.env` bleibt in `.gitignore`.
 4. **Kein YouTube-Login, keine Secrets, kein API-Key.** `DATABASE_URL` und Healthchecks-URLs sind Deployment-Detail.
 5. **Oneshot `done` bleibt `done`.** Nur `full_rerun` darf sie erneut anfassen; Retry nur bei `failed`.
 6. **Timestamps UTC** (naiv, `db.utcnow()`), UI/Spec-Zeitzone nur für Cron und Anzeige.
