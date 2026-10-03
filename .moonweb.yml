@@ -1,0 +1,6 @@
+title: "YouTube Playlist Sync"
+emoji: "🎬"
+category: code
+subcategory: "Archiving Tools"
+status: active
+stack: [Python, FastAPI, SQLAlchemy, APScheduler, yt-dlp, Docker]
