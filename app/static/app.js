@@ -1,5 +1,5 @@
-# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
-# Licensed under the MIT License. See LICENSE file in project root for details.
+// Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+// Licensed under the MIT License. See LICENSE file in project root for details.
 "use strict";
 
 const $ = (sel, root = document) => root.querySelector(sel);
