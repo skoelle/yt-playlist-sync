@@ -7,7 +7,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 - **Oneshot playlists** (title contains one of the keywords, default `setlist`, comma-separated, case-insensitive) are downloaded once. After a complete run they are never touched again. If something went wrong you get a status, an error summary and a retry button.
 - **Never deletes anything.** Playlists that disappear from YouTube are only marked `removed`.
 - One download at a time, no parallelism, with sleeps between videos to stay polite.
-- Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*. Data is reloaded with JavaScript, the page itself is never reloaded.
+- Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*, plus a playlist detail page (all database fields, job history, files on disk). Titles link to the detail page, a small ↗ opens the YouTube playlist. Data is reloaded with JavaScript, the page itself is never reloaded.
 - No Google login and no API keys: only public playlists are used.
 - Optional [Healthchecks](https://healthchecks.io) pings for the discovery run and the nightly sync.
 - yt-dlp updates itself on start and daily. The image is rebuilt weekly by GitHub Actions.

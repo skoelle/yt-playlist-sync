@@ -171,6 +171,8 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 |---|---|---|
 | GET | `/api/status` | Laufender Job, Queue, letzte/nächste Läufe, yt-dlp Version, Schreibtest, freier Platz |
 | GET | `/api/playlists?type=sync\|oneshot` | Playlists mit Zählern, Größe, letztem Job |
+| GET | `/api/playlists/{id}` | Detailseite: alle DB-Felder plus Job-Verlauf (letzte 25) |
+| GET | `/api/playlists/{id}/files` | Dateien im Zielordner: Name, Größe, mtime, Summen nach Endung. Existiert der Ordner nicht, `exists: false`; Pfade außerhalb von `data_dir` werden ignoriert |
 | GET | `/api/jobs?limit=50` | Jobhistorie |
 | GET | `/api/jobs/{id}/log?offset=N` | Log ab Byte-Offset |
 | POST | `/api/discovery/run`, `/api/sync/run` | Manuell starten |
@@ -184,11 +186,12 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 
 ## 9. Web UI
 
-Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-Tab), Zeilen werden per Schlüssel verglichen und nur bei Änderung aktualisiert. Kein Seiten-Reload, Scrollposition und geöffnetes Log bleiben erhalten. Tabs über den URL-Hash.
+Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-Tab), Zeilen werden per Schlüssel verglichen und nur bei Änderung aktualisiert. Kein Seiten-Reload, Scrollposition und geöffnetes Log bleiben erhalten. Tabs über den URL-Hash, Detailseiten als `#playlist-{id}`.
 
-- **Status:** aktueller Job (Fortschritt, Geschwindigkeit, ETA, Log-Panel, Abbrechen), Zeitpläne mit Buttons, System (Kanal, yt-dlp, Platz, Queue), letzte Jobs, Banner (DRY RUN, `/data` nicht beschreibbar, fehlgeschlagene Oneshots, Queue pausiert).
-- **Sync-Playlists:** Titel, Videos, Größe, letzter und nächster Sync, Status, Aktionen (Jetzt syncen, Ignorieren, Als Oneshot markieren).
+- **Status:** aktueller Job (Fortschritt, Geschwindigkeit, ETA, Abbrechen), Zeitpläne mit Buttons, System (Kanal, yt-dlp, Platz, Queue), letzte Jobs, Banner (DRY RUN, `/data` nicht beschreibbar, fehlgeschlagene Oneshots, Queue pausiert). Das Log-Panel ist global und öffnet von jeder Ansicht.
+- **Sync-Playlists:** Titel (verlinkt auf die Detailseite, kleiner ↗-Link nach YouTube), Videos, Größe, letzter und nächster Sync, Status, Aktionen (Jetzt syncen, Ignorieren, Als Oneshot markieren).
 - **Oneshot-Playlists:** nach Download-Datum sortiert (sortierbar), Songs inkl. übersprungen/fehlgeschlagen, Größe, Dauer, Status, Aktionen (Erneut versuchen, Full Re-Run, Log, Als Sync markieren), Summenzeile.
+- **Detailseite:** Kopf mit Zurück-Link, Titel, Typ-/Status-Badges und kleinem YouTube-Link; Aktionen (je nach Status), alle DB-Felder als KV-Tabelle, Dateien im Zielordner (Summen nach Endung plus Liste, Live-Polling), Job-Verlauf der Playlist mit Log-Buttons.
 - Dark Mode, relative Zeiten mit Tooltip, responsive.
 
 ## 10. Nicht-funktionale Anforderungen
