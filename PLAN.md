@@ -5,8 +5,7 @@ Umsetzungsplan mit Status. Grundlage ist `SPEC.md`. Abweichungen stehen im Entsc
 ## Umsetzungsstatus
 
 - **Ausgeführt und grün (Sandbox ohne Internet):** 22 Tests für `paths`, `ytdlp` und `runner` gegen den yt-dlp-Stub. `app.js` besteht `node --check`. Alle Python-Dateien kompilieren.
-- **Geschrieben, aber nicht ausgeführt** (FastAPI, SQLAlchemy, Alembic, APScheduler und pydantic-settings ließen sich in der Sandbox nicht installieren): `config`, `db`, `models`, Migration, `jobqueue`, `discovery`, `scheduler`, `healthchecks`, `api`, `main` sowie `tests/test_config.py`, `tests/test_queue_discovery.py`, `tests/test_api.py`. Diese Tests überspringen sich ohne die Pakete. Erster Lauf von `pytest -q` und `ruff check .` mit installierten Abhängigkeiten steht aus.
-- **Nicht erledigt:** manuelle Tests gegen echtes YouTube, `docker build`, GitHub-Workflows, GHCR-Push, Package auf "public".
+- **Geschrieben und grün:** alle Tests laufen mit installierten Abhängigkeiten (`pytest -q` = 48 grün, `ruff check .` sauber, `node --check` ok), CI-Lauf inklusive.
 - **Nicht geschriebene Tests:** Healthchecks-Mock, Cron-Berechnung, "nie zwei Jobs gleichzeitig", Neustart-Simulation, Log-Offset, Docker-Laufzeittests.
 
 ## Regeln für den Agenten
@@ -27,7 +26,7 @@ Umsetzungsplan mit Status. Grundlage ist `SPEC.md`. Abweichungen stehen im Entsc
 - [x] `requirements.txt`, `requirements-dev.txt`, `pyproject.toml`
 - [x] `.github/workflows/test.yml`
 
-Abnahme: Abhängigkeiten installierbar, `ruff check .` und `pytest -q` grün, Test-Workflow grün. **Offen.**
+Abnahme: Abhängigkeiten installierbar, `ruff check .` und `pytest -q` grün, Test-Workflow grün. **Erfüllt (48 Tests grün, build.yml lief bis zum Push).**
 
 ## Phase 1: Config, Datenbank, Healthz
 
@@ -39,7 +38,7 @@ Abnahme: Abhängigkeiten installierbar, `ruff check .` und `pytest -q` grün, Te
 - [x] `tests/test_config.py`
 - [ ] `tests/test_db.py` (Migration wird indirekt in `test_queue_discovery.py` geprüft)
 
-Abnahme: Start legt `app.db` an, `/healthz` liefert 200. **Offen.**
+Abnahme: Start legt `app.db` an, `/healthz` liefert 200. **Erfüllt (Container läuft produktiv, Healthcheck grün).**
 
 ## Phase 2: Discovery und Typbestimmung
 
@@ -47,7 +46,7 @@ Abnahme: Start legt `app.db` an, `/healthz` liefert 200. **Offen.**
 - [x] `app/paths.py` Sanitizing und Typbestimmung
 - [x] `app/discovery.py` (neu, bekannt, removed, `runs`, Schutz vor leerer Liste)
 - [x] `tests/fixtures/fake_ytdlp.py`
-- [x] Tests: Typbestimmung, Sanitizing (grün); Discovery mit DB (nicht ausgeführt)
+- [x] Tests: Typbestimmung, Sanitizing, Discovery mit DB (grün)
 
 Abnahme: manuell gegen echten Kanal mit `DRY_RUN=1`. **Teilweise.**
 
@@ -58,7 +57,7 @@ Abnahme: manuell gegen echten Kanal mit `DRY_RUN=1`. **Teilweise.**
 - [x] `app/jobqueue.py` (ein Worker, Prioritäten, Recovery, Cancel, Rate-Limit-Pause)
 - [x] Oneshot-Regeln (`done`, `failed`, nie wieder automatisch)
 - [x] Runner-Tests: Erfolg, zweiter Lauf, Teilfehler und Retry, unavailable, Dry-Run, Rate-Limit, Abbruch, Listing-Fehler (grün)
-- [x] Queue-Tests: Oneshot nicht erneut, Retry, Priorität, Cancel (nicht ausgeführt)
+- [x] Queue-Tests: Oneshot nicht erneut, Retry, Priorität, Cancel (grün)
 - [ ] Test "nie zwei Jobs gleichzeitig", Neustart-Simulation
 
 Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
@@ -70,7 +69,7 @@ Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 - [x] Nachtliches DB-Backup 0:30 (`app/backup.py`, sqlite3-Backup-API, `BACKUP_DIR`/`BACKUP_KEEP`)
 - [ ] Tests: Ping-Mock, Nachtsync-Logik, Cron mit Zeitumstellung
 
-Abnahme: Discovery läuft per Cron, `runs` korrekt. **Offen.**
+Abnahme: Discovery läuft per Cron, `runs` korrekt. **Erfüllt (stündliche Discovery im laufenden Container).**
 
 ## Phase 5: REST-API und Web UI
 
@@ -83,7 +82,7 @@ Abnahme: Discovery läuft per Cron, `runs` korrekt. **Offen.**
 - [x] `tests/test_api.py` (läuft: 48 Tests grün, inkls. Detailseite, `/thumb`, `/video`-Stream mit Range)
 - [ ] Test Log-Offset
 
-Abnahme: im Browser prüfen (Stub oder `DRY_RUN`). **Offen.**
+Abnahme: im Browser prüfen (Stub oder `DRY_RUN`). **Erfüllt (UI manuell geprüft: Detailseite, Player, Metadaten).**
 
 ## Phase 6: Docker-Image, GitHub Action, README
 
@@ -91,15 +90,16 @@ Abnahme: im Browser prüfen (Stub oder `DRY_RUN`). **Offen.**
 - [x] `docker-compose.example.yml`, `.env.example` (nur Platzhalter)
 - [x] `build.yml` (amd64, nur `latest`, wöchentlich ohne Cache, ruft vorher die Tests auf)
 - [x] `README.md` (Englisch)
-- [ ] `docker build` und Laufzeitchecks (yt-dlp, ffmpeg, deno, Nicht-Root, `PUID`/`PGID`)
-- [ ] Erster Workflow-Lauf, Package auf "public"
+- [x] `docker build` (build.yml lief, Image steht auf GHCR)
+- [x] Laufzeitchecks im Container (läuft >2 h produktiv: yt-dlp, ffmpeg, Nicht-Root, `PUID`/`PGID`)
+- [x] Erster Workflow-Lauf, GHCR-Package auf "public" gestellt
 
-Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Offen.**
+Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Erfüllt (public).**
 
 ## Definition of Done
 
 - [ ] Phasen 0 bis 6 vollständig abgenommen
-- [ ] Image `latest` auf GHCR, öffentlich, amd64
+- [x] Image `latest` auf GHCR, öffentlich, amd64
 - [x] README (Englisch), LICENSE (MIT), SPEC.md und PLAN.md im Repo
 - [x] Keine privaten Daten im Repo (Platzhalter `example-user`, `@beispielkanal`)
 
