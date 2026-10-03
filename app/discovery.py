@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+# Licensed under the MIT License. See LICENSE file in project root for details.
 """Hourly discovery of public playlists (SPEC 6.1 and 6.2)."""
 from __future__ import annotations
 

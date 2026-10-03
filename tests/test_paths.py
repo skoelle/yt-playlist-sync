@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+# Licensed under the MIT License. See LICENSE file in project root for details.
 from app.paths import is_oneshot, sanitize_folder_name
 
 

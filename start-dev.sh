@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+# Licensed under the MIT License. See LICENSE file in project root for details.
 # Start yt-playlist-sync locally in DRY_RUN mode with all data under a temp directory.
 #
 #   ./start-dev.sh                          # UI at http://<host>:8048 (0.0.0.0, like the container)

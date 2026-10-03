@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+# Licensed under the MIT License. See LICENSE file in project root for details.
 """Runs one yt-dlp download for one playlist. No database access here."""
 from __future__ import annotations
 

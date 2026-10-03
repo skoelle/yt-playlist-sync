@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
+# Licensed under the MIT License. See LICENSE file in project root for details.
 """Cron driven tasks: discovery, nightly sync, yt-dlp updates."""
 from __future__ import annotations
 
