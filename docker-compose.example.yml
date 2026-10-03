@@ -2,7 +2,7 @@
 # values (channel, ping URLs, paths) out of the public repository (.env is git-ignored).
 services:
   yt-playlist-sync:
-    image: ghcr.io/example-user/yt-playlist-sync:latest
+    image: ghcr.io/skoelle/yt-playlist-sync:latest
     container_name: yt-playlist-sync
     restart: unless-stopped
     environment:
@@ -10,7 +10,7 @@ services:
       PUID: "1000"
       PGID: "1000"
       YOUTUBE_CHANNEL: "${YOUTUBE_CHANNEL:-@beispielkanal}"
-      ONESHOT_KEYWORD: "setlist"
+      ONESHOT_KEYWORD: "${ONESHOT_KEYWORD:-setlist}"
       DISCOVERY_CRON: "0 * * * *"
       SYNC_CRON: "0 3 * * *"
       HC_DISCOVERY_URL: "${HC_DISCOVERY_URL:-}"
