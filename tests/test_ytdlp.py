@@ -91,3 +91,47 @@ def test_build_command():
         ytdlp_bin="yt-dlp", playlist_id="PL1", folder="F", data_dir="/data",
         archive_path="/a.txt", sleep_min=1, sleep_max=2, dry_run=False)
     assert "--simulate" not in cmd2
+
+
+def test_read_video_entries(tmp_path):
+    import json as _json
+
+    # folder name contains brackets: glob would treat them as a character class
+    folder = tmp_path / "Setlist [LIVE] Mix"
+    folder.mkdir()
+    (folder / "00 - Setlist [LIVE] Mix [PLABC1234567].jpg").write_bytes(b"cover")
+    (folder / "00 - Setlist [LIVE] Mix [PLABC1234567].info.json").write_text("{}")
+    (folder / "01 - No Son [nAUaWGdv6So].mkv").write_bytes(b"v" * 10)
+    (folder / "01 - No Son [nAUaWGdv6So].jpg").write_bytes(b"t")
+    (folder / "01 - No Son [nAUaWGdv6So].description").write_text("desc")
+    (folder / "01 - No Son [nAUaWGdv6So].info.json").write_text(_json.dumps({
+        "title": "No Son", "duration": 79, "upload_date": "20251127",
+        "view_count": 3816, "like_count": 56, "channel": "Excide - Topic",
+    }))
+    (folder / "02 - Second Song [abcdefghijk].mp4").write_bytes(b"v")
+    (folder / "02 - Second Song [abcdefghijk].info.json").write_text("{broken json")
+
+    out = ytdlp.read_video_entries(folder, "PLABC1234567")
+    assert out["exists"] is True
+    assert out["cover"] == "00 - Setlist [LIVE] Mix [PLABC1234567].jpg"
+    assert out["video_count"] == 2
+    assert out["total_duration_s"] == 79
+
+    first, second = out["videos"]
+    assert first["index"] == 1 and first["video_id"] == "nAUaWGdv6So"
+    assert first["title"] == "No Son" and first["file"] == "01 - No Son [nAUaWGdv6So].mkv"
+    assert first["thumb"] == "01 - No Son [nAUaWGdv6So].jpg"
+    assert first["duration_s"] == 79 and first["upload_date"] == "20251127"
+    assert first["view_count"] == 3816 and first["like_count"] == 56
+    assert first["channel"] == "Excide - Topic" and first["size_bytes"] == 10
+    assert "mkv" in first["sidecars"] and "jpg" in first["sidecars"]
+    assert "info.json" in first["sidecars"] and "description" in first["sidecars"]
+    # broken info.json falls back to the file name
+    assert second["title"] == "Second Song" and second["duration_s"] is None
+    assert second["thumb"] is None and second["size_bytes"] == 1
+
+    # cover fallback: playlist id mismatch still finds the 00-*.jpg
+    assert ytdlp.read_video_entries(folder, "PLNOMATCH")["cover"].startswith("00 - ")
+    # missing folder
+    out = ytdlp.read_video_entries(tmp_path / "nope", "PL1")
+    assert out["exists"] is False and out["videos"] == [] and out["cover"] is None

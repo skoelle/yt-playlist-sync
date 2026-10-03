@@ -6,14 +6,17 @@ from __future__ import annotations
 import asyncio
 import shutil
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from .db import session_scope
 from .models import Job, Playlist, Run
+from .ytdlp import read_video_entries
 
 router = APIRouter(prefix="/api")
 _background: set[asyncio.Task] = set()
@@ -163,6 +166,49 @@ async def playlist_files(pid: int, request: Request) -> dict[str, Any]:
         "total_files": len(files), "total_bytes": sum(f["size_bytes"] for f in files),
         "by_ext": by_ext, "files": files,
     }
+
+
+def _playlist_folder(cfg, folder_name: str | None) -> Path | None:
+    if not folder_name:
+        return None
+    base = cfg.data_dir.resolve()
+    target = (base / folder_name).resolve()
+    return target if target.is_relative_to(base) else None
+
+
+_EMPTY_VIDEOS: dict[str, Any] = {
+    "exists": False, "cover": None, "video_count": 0, "total_duration_s": 0, "videos": [],
+}
+
+
+@router.get("/playlists/{pid}/videos")
+async def playlist_videos(pid: int, request: Request) -> dict[str, Any]:
+    with session_scope() as s:
+        pl = _get_playlist(s, pid)
+        folder_name, playlist_id = pl.folder_name, pl.playlist_id
+    target = _playlist_folder(request.app.state.settings, folder_name)
+    if target is None:
+        return dict(_EMPTY_VIDEOS)
+    return read_video_entries(target, playlist_id)
+
+
+_IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+@router.get("/playlists/{pid}/thumb")
+async def playlist_thumb(request: Request, pid: int, file: str = Query(...)) -> FileResponse:
+    if not file or "/" in file or "\\" in file or Path(file).suffix.lower() not in _IMG_EXTS:
+        raise HTTPException(404, "file not found")
+    with session_scope() as s:
+        pl = _get_playlist(s, pid)
+        folder_name = pl.folder_name
+    target = _playlist_folder(request.app.state.settings, folder_name)
+    if target is None:
+        raise HTTPException(404, "file not found")
+    f = target / Path(file).name
+    if not f.is_file():
+        raise HTTPException(404, "file not found")
+    return FileResponse(f, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.post("/playlists/{pid}/run")

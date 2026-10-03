@@ -100,25 +100,42 @@
   <section id="tab-playlist" data-tab="playlist" hidden>
     <div class="detail-head">
       <a id="detail-back" href="#status">← Zurück</a>
-      <h2 id="detail-title">…</h2>
-      <a id="detail-yt" class="ext" target="_blank" rel="noopener" hidden>↗ YouTube</a>
-      <span id="detail-badges"></span>
+      <div class="hero">
+        <img id="detail-cover" alt="" hidden>
+        <div class="hero-text">
+          <div class="detail-title-row">
+            <h2 id="detail-title">…</h2>
+            <a id="detail-yt" class="ext" target="_blank" rel="noopener" hidden>↗ YouTube</a>
+          </div>
+          <div id="detail-badges"></div>
+          <div class="muted" id="detail-stats"></div>
+          <div class="actions" id="detail-actions"></div>
+        </div>
+      </div>
     </div>
-    <div class="actions" id="detail-actions"></div>
+    <div class="card">
+      <h2>Videos <span id="detail-video-summary" class="muted"></span></h2>
+      <div id="detail-videos-none" class="muted" hidden></div>
+      <div class="table-wrap" id="detail-videos-wrap" hidden>
+        <table class="vid-table" id="detail-videos-table"><tbody></tbody></table>
+      </div>
+    </div>
     <div class="cards">
       <div class="card">
         <h2>Playlist-Daten</h2>
         <table class="kv"><tbody id="detail-kv"></tbody></table>
       </div>
       <div class="card">
-        <h2>Dateien im Zielordner <span id="detail-files-summary" class="muted"></span></h2>
-        <div id="detail-files-none" class="muted" hidden>Ordner existiert (noch) nicht – Daten erscheinen hier, sobald der erste Download lief.</div>
-        <div class="table-wrap" id="detail-files-wrap" hidden>
-          <table id="detail-files-table">
-            <thead><tr><th>Datei</th><th>Größe</th><th>Geändert</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
+        <details id="detail-files-details">
+          <summary class="files-summary">Alle Dateien <span id="detail-files-summary" class="muted"></span></summary>
+          <div id="detail-files-none" class="muted" hidden>Ordner existiert (noch) nicht – Dateien erscheinen hier, sobald der erste Download lief.</div>
+          <div class="table-wrap" id="detail-files-wrap" hidden>
+            <table id="detail-files-table">
+              <thead><tr><th>Datei</th><th>Größe</th><th>Geändert</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
       </div>
     </div>
     <h2>Job-Verlauf</h2>

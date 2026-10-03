@@ -261,3 +261,97 @@ def folder_size(path: Path | str) -> int:
             except OSError:
                 pass
     return total
+
+
+_STEM = re.compile(r"^(\d+) - (.+) \[([^\][]+)\]$")
+_THUMB_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+_VIDEO_EXTS = {".mkv", ".mp4"}
+_SIDECARS = (".jpg", ".jpeg", ".png", ".webp", ".info.json", ".description")
+
+# info.json files are ~100 KB each; cache parsed results keyed by (mtime_ns, size).
+_INFO_CACHE: dict[str, tuple[int, int, dict[str, Any]]] = {}
+_INFO_CACHE_MAX = 4096
+
+
+def _read_info(path: Path) -> dict[str, Any]:
+    try:
+        st = path.stat()
+        key = str(path)
+    except OSError:
+        return {}
+    hit = _INFO_CACHE.get(key)
+    if hit is not None and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+        return hit[2]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    if len(_INFO_CACHE) >= _INFO_CACHE_MAX:
+        _INFO_CACHE.clear()
+    _INFO_CACHE[key] = (st.st_mtime_ns, st.st_size, data)
+    return data
+
+
+def _find_cover(names: list[str], playlist_id: str) -> str | None:
+    for n in names:
+        if n.startswith("00 - ") and n.endswith(".jpg") and f"[{playlist_id}]" in n:
+            return n
+    for n in names:
+        if n.startswith("00 - ") and n.endswith(".jpg"):
+            return n
+    return None
+
+
+def read_video_entries(folder: Path | str, playlist_id: str) -> dict[str, Any]:
+    """Parse a yt-dlp playlist folder into a cover plus per-video gallery entries.
+
+    Uses os.listdir (not glob): folder names contain ``[...]`` which glob would
+    treat as a character class. Broken info.json falls back to the file name.
+    """
+    d = Path(folder)
+    empty: dict[str, Any] = {
+        "exists": False, "cover": None, "video_count": 0, "total_duration_s": 0, "videos": [],
+    }
+    if not d.is_dir():
+        return empty
+    try:
+        names = sorted(os.listdir(d))
+    except OSError:
+        return empty
+    entries: list[dict[str, Any]] = []
+    for name in names:
+        p = d / name
+        if p.suffix.lower() not in _VIDEO_EXTS:
+            continue
+        stem = p.stem
+        m = _STEM.match(stem)
+        index = int(m.group(1)) if m else 0
+        video_id = m.group(3) if m else ""
+        info = _read_info(d / f"{stem}.info.json")
+        title = str(info.get("title") or (m.group(2) if m else stem))
+        duration = info.get("duration")
+        thumb = next((f"{stem}{e}" for e in _THUMB_EXTS if (d / f"{stem}{e}").is_file()), None)
+        sidecars = [p.suffix[1:]] + [s.lstrip(".") for s in _SIDECARS if (d / f"{stem}{s}").is_file()]
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        entries.append({
+            "index": index, "video_id": video_id, "title": title, "file": name,
+            "thumb": thumb,
+            "duration_s": duration if isinstance(duration, (int, float)) else None,
+            "upload_date": info.get("upload_date"),
+            "view_count": info.get("view_count"),
+            "like_count": info.get("like_count"),
+            "channel": info.get("channel") or info.get("uploader"),
+            "size_bytes": size, "sidecars": sidecars,
+        })
+    entries.sort(key=lambda e: (e["index"], e["file"]))
+    return {
+        "exists": True, "cover": _find_cover(names, playlist_id),
+        "video_count": len(entries),
+        "total_duration_s": int(sum(e["duration_s"] for e in entries if e["duration_s"])),
+        "videos": entries,
+    }
