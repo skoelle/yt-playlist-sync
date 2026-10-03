@@ -12,7 +12,7 @@ pytest.importorskip("apscheduler")
 from sqlalchemy import select  # noqa: E402
 
 from app.config import Settings, ensure_dirs  # noqa: E402
-from app.db import init_engine, migrate, session_scope  # noqa: E402
+from app.db import init_engine, migrate, session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery, run_discovery  # noqa: E402
 from app.jobqueue import JobQueue  # noqa: E402
 from app.models import Job, Playlist  # noqa: E402
@@ -156,3 +156,40 @@ def test_single_worker_never_runs_two_jobs(cfg, stub):
         await queue.stop()
 
     asyncio.run(scenario())
+
+
+def test_restart_requeues_interrupted_jobs(cfg):
+    """Simulierter Neustart mitten im Download: interrupted -> neu eingereiht,
+    Playlist-States zurückgesetzt, kein doppelter Lauf (SPEC 12/9)."""
+    apply_discovery(
+        [PlaylistInfo("PLaaa", "Sommer Mix"), PlaylistInfo("PLbbb", "Konzert SETLIST")], "setlist"
+    )
+    with session_scope() as s:
+        for pk in s.scalars(select(Playlist.id)).all():
+            s.add(Job(playlist_id=pk, trigger="manual", status="running",
+                      queued_at=utcnow(), started_at=utcnow()))
+    queue = JobQueue(cfg)
+    queue.recover()  # exactly what happens on a fresh start()
+    with session_scope() as s:
+        jobs = list(s.scalars(select(Job).order_by(Job.id)).all())
+        interrupted = [j for j in jobs if j.status == "interrupted"]
+        queued = [j for j in jobs if j.status == "queued"]
+        assert len(jobs) == 4 and len(interrupted) == 2 and len(queued) == 2
+        assert all(j.finished_at is not None for j in interrupted)
+        states = {p.type: p.state for p in s.scalars(select(Playlist)).all()}
+        new_ids = [j.id for j in queued]
+    # recover() resets to new/idle first, enqueue() immediately marks them queued again
+    assert states == {"sync": "queued", "oneshot": "queued"}
+
+    async def scenario():
+        await queue.start()
+        statuses = await queue.wait_for_jobs(new_ids, poll=0.2)
+        assert set(statuses.values()) == {"success"}
+        await queue.stop()
+
+    asyncio.run(scenario())
+    with session_scope() as s:
+        # the interrupted runs stay interrupted, only the requeued runs execute
+        assert sorted(j.status for j in s.scalars(select(Job)).all()) == [
+            "interrupted", "interrupted", "success", "success",
+        ]
