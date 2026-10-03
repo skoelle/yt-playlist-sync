@@ -20,7 +20,9 @@ from app.ytdlp import PlaylistInfo  # noqa: E402
 
 @pytest.fixture
 def client(tmp_path):
-    cfg = Settings(youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config")
+    cfg = Settings(
+        youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config"
+    )
     with TestClient(create_app(cfg, start_background=False)) as c:
         yield c
 

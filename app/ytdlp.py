@@ -196,7 +196,12 @@ def build_download_command(
 def parse_line(line: str) -> dict[str, Any] | None:
     line = line.rstrip("\r\n")
     if m := _PROGRESS.match(line):
-        return {"type": "progress", "percent": float(m.group(1)), "speed": m.group(2).strip(), "eta": m.group(3).strip()}
+        return {
+            "type": "progress",
+            "percent": float(m.group(1)),
+            "speed": m.group(2).strip(),
+            "eta": m.group(3).strip(),
+        }
     if m := _ITEM.match(line):
         return {"type": "item", "index": int(m.group(1)), "total": int(m.group(2))}
     if m := _DEST.match(line):

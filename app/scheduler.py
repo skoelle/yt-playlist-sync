@@ -87,7 +87,9 @@ class AppScheduler:
             with session_scope() as s:
                 pks = list(s.scalars(
                     select(Playlist.id).where(
-                        Playlist.type == "sync", Playlist.ignored.is_(False), Playlist.remote_status == "active"
+                        Playlist.type == "sync",
+                        Playlist.ignored.is_(False),
+                        Playlist.remote_status == "active",
                     )
                 ).all())
             job_ids = [j for j in (self.queue.enqueue(pk, "nightly") for pk in pks) if j is not None]

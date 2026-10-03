@@ -54,7 +54,10 @@ def main():
             errors += 1
             continue
         if mode == "temporary":
-            log_err(f"ERROR: [youtube] {vid}: Unable to download webpage: HTTP Error 503: Service Unavailable")
+            log_err(
+                f"ERROR: [youtube] {vid}: Unable to download webpage: "
+                "HTTP Error 503: Service Unavailable"
+            )
             errors += 1
             continue
         if mode == "ratelimit":
