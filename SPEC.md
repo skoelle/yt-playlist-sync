@@ -220,7 +220,7 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - `test.yml`: `ruff check` und `pytest -q` (Pull Requests, Pushes außerhalb `main`, wiederverwendbar).
 - `build.yml`: Push auf `main`, manuell und wöchentlich (Montag 04:17 UTC, ohne Cache). Ruft zuerst die Tests auf, baut `linux/amd64` und pusht **nur `latest`** nach `ghcr.io/<owner>/yt-playlist-sync`.
 - GitHub deaktiviert geplante Workflows nach 60 Tagen ohne Repo-Aktivität.
-- Das GHCR-Package ist anfangs privat und muss einmalig auf "public" gestellt werden.
+- Das GHCR-Package ist public; `docker pull` funktioniert ohne Login.
 - Deployment per `docker-compose.example.yml` (nur Platzhalter), Updates über Watchtower.
 
 ## 12. Abnahmekriterien

@@ -30,7 +30,7 @@ docker compose up -d
 
 Open `http://<host>:8048`. The app has no login on purpose; put it behind a reverse proxy with authentication (for example Authelia) if you expose it.
 
-The GHCR package is private after the first push. Set it to *public* once in the GitHub package settings, otherwise `docker pull` needs a login.
+The GHCR package is public: `docker pull ghcr.io/skoelle/yt-playlist-sync:latest` works without a login.
 
 ## 📂 Volumes
 
