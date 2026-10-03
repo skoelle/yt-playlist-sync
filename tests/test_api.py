@@ -144,3 +144,35 @@ def test_playlist_videos_and_thumb(client):
         assert client.get(f"/api/playlists/{pid}/thumb", params={"file": f}).status_code == 404, f
     assert client.get("/api/playlists/9999/videos").status_code == 404
     assert client.get("/api/playlists/9999/thumb", params={"file": "a.jpg"}).status_code == 404
+
+
+def test_playlist_video_stream(client):
+    apply_discovery([PlaylistInfo("PL1", "Sommer Mix")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+    name = sanitize_folder_name("Sommer Mix", "PL1")
+    with session_scope() as s:
+        s.get(Playlist, pid).folder_name = name
+    d = client.app.state.settings.data_dir / name
+    d.mkdir(parents=True)
+    (d / "01 - Song [nAUaWGdv6So].mkv").write_bytes(b"video-bytes-here")
+    (d / "01 - Song [nAUaWGdv6So].jpg").write_bytes(b"thumb")
+
+    f = "01 - Song [nAUaWGdv6So].mkv"
+    r = client.get(f"/api/playlists/{pid}/video", params={"file": f})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "video/x-matroska"
+    assert r.headers.get("accept-ranges") == "bytes"
+    assert r.content == b"video-bytes-here"
+
+    # range request (seeking)
+    r = client.get(f"/api/playlists/{pid}/video", params={"file": f},
+                   headers={"Range": "bytes=0-4"})
+    assert r.status_code == 206 and r.content == b"video"
+    assert r.headers["content-range"] == "bytes 0-4/16"
+
+    # whitelist and traversal
+    bad = ["01 - Song [nAUaWGdv6So].jpg", "01 - Song [nAUaWGdv6So].mkv.part",
+           "../../app.py", "", "x.EXE"]
+    for file in bad:
+        assert client.get(f"/api/playlists/{pid}/video", params={"file": file}).status_code == 404, file
+    assert client.get("/api/playlists/9999/video", params={"file": f}).status_code == 404

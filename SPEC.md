@@ -175,6 +175,7 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 | GET | `/api/playlists/{id}/files` | Dateien im Zielordner: Name, Größe, mtime, Summen nach Endung. Existiert der Ordner nicht, `exists: false`; Pfade außerhalb von `data_dir` werden ignoriert |
 | GET | `/api/playlists/{id}/videos` | Videogalerie: Cover (`00 - …jpg`) und pro Video Titel, Dauer, Datum, Aufrufe aus der `.info.json` (Parse-Cache pro Datei), Summe der Dauern |
 | GET | `/api/playlists/{id}/thumb?file=NAME` | Thumbnail aus dem Zielordner als Bild; nur `jpg/jpeg/png/webp`, kein `/` oder `..`, sonst 404 |
+| GET | `/api/playlists/{id}/video?file=NAME` | Videodatei streamen (`mkv/mp4/webm`) mit Range-Support für Spulen; gleiche Pfadsicherheit wie `thumb` |
 | GET | `/api/jobs?limit=50` | Jobhistorie |
 | GET | `/api/jobs/{id}/log?offset=N` | Log ab Byte-Offset |
 | POST | `/api/discovery/run`, `/api/sync/run` | Manuell starten |
@@ -193,7 +194,7 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - **Status:** aktueller Job (Fortschritt, Geschwindigkeit, ETA, Abbrechen), Zeitpläne mit Buttons, System (Kanal, yt-dlp, Platz, Queue), letzte Jobs, Banner (DRY RUN, `/data` nicht beschreibbar, fehlgeschlagene Oneshots, Queue pausiert). Das Log-Panel ist global und öffnet von jeder Ansicht.
 - **Sync-Playlists:** Titel (verlinkt auf die Detailseite, kleiner ↗-Link nach YouTube), Videos, Größe, letzter und nächster Sync, Status, Aktionen (Jetzt syncen, Ignorieren, Als Oneshot markieren).
 - **Oneshot-Playlists:** nach Download-Datum sortiert (sortierbar), Songs inkl. übersprungen/fehlgeschlagen, Größe, Dauer, Status, Aktionen (Erneut versuchen, Full Re-Run, Log, Als Sync markieren), Summenzeile.
-- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Größe) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Aufrufe, vorhandene Sidecar-Dateien als Chips – live gepollt. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „Alle Dateien" und der Job-Verlauf der Playlist mit Log-Buttons.
+- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Größe) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Aufrufe, vorhandene Sidecar-Dateien als Chips – live gepollt. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC/Klick schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „Alle Dateien" und der Job-Verlauf der Playlist mit Log-Buttons.
 - Dark Mode, relative Zeiten mit Tooltip, responsive.
 
 ## 10. Nicht-funktionale Anforderungen

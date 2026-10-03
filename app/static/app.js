@@ -14,6 +14,7 @@ const state = {
   detail: null,
   detailId: null,
   detailFrom: "status",
+  player: null,
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
@@ -216,8 +217,9 @@ function videoRow(v) {
   if (up) meta.push(up);
   if (v.view_count != null) meta.push(fmtViews(v.view_count));
   const chips = (v.sidecars || []).map((s) => `<code>${esc(s)}</code>`).join(" ");
-  return `<td class="vid-td-thumb">${thumb}${dur}</td>
-    <td><div class="vid-title">${esc(v.title)}</div>
+  const play = `data-action="play" data-file="${esc(v.file)}"`;
+  return `<td class="vid-td-thumb"><a class="vid-play" ${play}>${thumb}${dur}</a></td>
+    <td><div class="vid-title"><a class="vid-play" ${play}>${esc(v.title)}</a></div>
     <div class="vid-meta">${meta.map(esc).join(" · ")}</div>
     <div class="vid-chips">${chips}</div></td>`;
 }
@@ -325,6 +327,50 @@ function renderDetail(p, f, vids) {
   syncRows($("#detail-jobs-table tbody"), p.jobs, (j) => j.id, (j) => jobRow(j, false));
 }
 
+function closePlayer() {
+  const video = $("#player-video");
+  if (video) { video.pause(); video.removeAttribute("src"); video.load(); }
+  state.player = null;
+  $("#player").hidden = true;
+}
+
+function renderPlayer() {
+  const P = state.player;
+  const vids = state.detail && state.detail.vids ? state.detail.vids.videos : [];
+  const i = P ? vids.findIndex((x) => x.file === P.file) : -1;
+  if (i < 0) { closePlayer(); return; }
+  const v = vids[i];
+  $("#player").hidden = false;
+  setText("player-title", v.title);
+  setText("player-count", `${i + 1} / ${vids.length}`);
+  const yt = $("#player-yt");
+  if (v.video_id) {
+    yt.href = `https://www.youtube.com/watch?v=${v.video_id}`;
+    yt.hidden = false;
+  } else {
+    yt.hidden = true;
+  }
+  const video = $("#player-video");
+  const src = `/api/playlists/${state.detailId}/video?file=${encodeURIComponent(v.file)}`;
+  if (video.dataset.src !== src) {
+    video.dataset.src = src;
+    video.src = src;
+    video.onended = () => playerMove(1);
+  }
+  $("#player-prev").disabled = i === 0;
+  $("#player-next").disabled = i >= vids.length - 1;
+}
+
+function playerMove(delta) {
+  const P = state.player;
+  const vids = state.detail && state.detail.vids ? state.detail.vids.videos : [];
+  const i = P ? vids.findIndex((x) => x.file === P.file) : -1;
+  const target = vids[i + delta];
+  if (!target) return;
+  state.player = { file: target.file };
+  renderPlayer();
+}
+
 async function pollLog() {
   const L = state.log;
   if (!L.open || L.jobId == null) return;
@@ -385,6 +431,7 @@ async function tick() {
 }
 
 function showTab() {
+  if (state.player) closePlayer();
   const h = (location.hash || "#status").slice(1);
   const m = /^playlist-(\d+)$/.exec(h);
   if (m) {
@@ -427,6 +474,10 @@ async function act(action, el) {
         if (state.status && state.status.current) openLog(state.status.current.job_id);
         return;
       case "close-log": state.log.open = false; $("#log-panel").hidden = true; return;
+      case "play": state.player = { file: el.dataset.file }; renderPlayer(); return;
+      case "player-close": closePlayer(); return;
+      case "player-prev": playerMove(-1); return;
+      case "player-next": playerMove(1); return;
       case "discovery-now": await api("/discovery/run", { method: "POST" }); break;
       case "sync-now": await api("/sync/run", { method: "POST" }); break;
       default: return;
@@ -450,6 +501,9 @@ document.addEventListener("click", (ev) => {
   }
 });
 window.addEventListener("hashchange", showTab);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && state.player) closePlayer();
+});
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
 setInterval(() => { if (document.visibilityState === "visible") tick(); }, 5000);
 showTab();

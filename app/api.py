@@ -193,22 +193,39 @@ async def playlist_videos(pid: int, request: Request) -> dict[str, Any]:
 
 
 _IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+_VIDEO_EXTS = {".mkv", ".mp4", ".webm"}
+_VIDEO_MEDIA = {".mkv": "video/x-matroska", ".mp4": "video/mp4", ".webm": "video/webm"}
 
 
-@router.get("/playlists/{pid}/thumb")
-async def playlist_thumb(request: Request, pid: int, file: str = Query(...)) -> FileResponse:
-    if not file or "/" in file or "\\" in file or Path(file).suffix.lower() not in _IMG_EXTS:
+def _safe_media_file(cfg, folder_name: str | None, file: str, exts: set[str]) -> Path:
+    """Resolve a single media file inside the playlist folder, or raise 404."""
+    if not file or "/" in file or "\\" in file or Path(file).suffix.lower() not in exts:
         raise HTTPException(404, "file not found")
-    with session_scope() as s:
-        pl = _get_playlist(s, pid)
-        folder_name = pl.folder_name
-    target = _playlist_folder(request.app.state.settings, folder_name)
+    target = _playlist_folder(cfg, folder_name)
     if target is None:
         raise HTTPException(404, "file not found")
     f = target / Path(file).name
     if not f.is_file():
         raise HTTPException(404, "file not found")
+    return f
+
+
+def _folder_name(pid: int) -> str | None:
+    with session_scope() as s:
+        return _get_playlist(s, pid).folder_name
+
+
+@router.get("/playlists/{pid}/thumb")
+async def playlist_thumb(request: Request, pid: int, file: str = Query(...)) -> FileResponse:
+    f = _safe_media_file(request.app.state.settings, _folder_name(pid), file, _IMG_EXTS)
     return FileResponse(f, headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.get("/playlists/{pid}/video")
+async def playlist_video(request: Request, pid: int, file: str = Query(...)) -> FileResponse:
+    f = _safe_media_file(request.app.state.settings, _folder_name(pid), file, _VIDEO_EXTS)
+    media = _VIDEO_MEDIA[f.suffix.lower()]
+    return FileResponse(f, media_type=media, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.post("/playlists/{pid}/run")
