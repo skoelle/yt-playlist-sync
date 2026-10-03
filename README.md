@@ -7,7 +7,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 - 🎯 **Oneshot playlists** (title contains one of the keywords, default `setlist`, comma-separated, case-insensitive) are downloaded once. After a complete run they are never touched again. If something went wrong you get a status, an error summary and a retry button.
 - 🚫 **Never deletes anything.** Playlists that disappear from YouTube are only marked `removed`.
 - 🐌 One download at a time, no parallelism, with sleeps between videos to stay polite.
-- 🖥️ Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*, plus a playlist detail page: cover image, a video gallery with thumbnails, duration badges and metadata from the local `.info.json` files (like a YouTube playlist), including resolution, file size, codecs and bitrates per video. Clicking a video opens a built-in player that streams the downloaded file (seeking via HTTP range) and continues with the next video. Also on the page: all database fields, job history, and the raw file list. Titles link to the detail page, a small ↗ opens the YouTube playlist. Data is reloaded with JavaScript, the page itself is never reloaded.
+- 🖥️ Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*, plus a playlist detail page: cover image, a video gallery with thumbnails, duration badges and metadata from the local `.info.json` files (like a YouTube playlist), including resolution, file size, codecs and bitrates per video. Clicking a video opens a built-in player that streams the downloaded file (seeking via HTTP range) and continues with the next video; click the background or press ESC to close. Also on the page: all database fields, job history, and the raw file list. Titles link to the detail page, a small ↗ opens the YouTube playlist. Data is reloaded with JavaScript, the page itself is never reloaded.
 - 🔒 No Google login and no API keys: only public playlists are used.
 - 🩺 Optional [Healthchecks](https://healthchecks.io) pings for the discovery run and the nightly sync.
 - 📦 yt-dlp updates itself on start and daily. The image is rebuilt weekly by GitHub Actions.
@@ -97,7 +97,28 @@ DATA_DIR=./.dev/data CONFIG_DIR=./.dev/config DRY_RUN=1 YOUTUBE_CHANNEL=@yourcha
 
 🧪 Tests use a stub (`tests/fixtures/fake_ytdlp.py`) instead of the real yt-dlp, so they need no network.
 
-See [SPEC.md](SPEC.md) for the specification and [PLAN.md](PLAN.md) for the implementation plan.
+Dependency updates arrive as weekly Renovate PRs (Mondays before 6 am, minor/patch merged automatically).
+
+See [SPEC.md](SPEC.md) for the specification, [PLAN.md](PLAN.md) for the implementation plan and [AGENTS.md](AGENTS.md) for the working rules.
+
+## 📁 Project structure
+
+```
+app/
+├── main.py, api.py          FastAPI app, REST endpoints, static UI serving
+├── config.py, db.py         Settings (pydantic), engine, sessions, migrations
+├── models.py, backup.py     Data model, nightly SQLite backup with rotation
+├── scheduler.py             Cron jobs: discovery, nightly sync, yt-dlp update, log cleanup, backup
+├── jobqueue.py, runner.py   Single-worker queue and the yt-dlp subprocess runner
+├── ytdlp.py, discovery.py   yt-dlp command builder/parsers, playlist discovery
+├── healthchecks.py, paths.py  Ping helper, folder-name sanitising
+└── static/                  index.html, app.js, style.css (vanilla, no build step)
+migrations/                  Alembic schema migrations
+tests/                       pytest suite; fixtures/fake_ytdlp.py is the network-free stub
+.github/workflows/           test.yml (ruff + pytest), build.yml (weekly amd64 image)
+renovate.json                weekly dependency update schedule
+SPEC.md / PLAN.md / AGENTS.md  specification, implementation status, working rules
+```
 
 ## 📜 License
 

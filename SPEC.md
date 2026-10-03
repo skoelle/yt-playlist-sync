@@ -15,7 +15,7 @@ Ein selbst gehosteter Dienst, der die **öffentlichen Playlists eines YouTube-Ka
 - Genau ein Download-Job zur selben Zeit (keine Parallelität).
 - Web UI mit 3 Tabs, Updates per JavaScript (`fetch`), kein HTML-Reload.
 - Image per GitHub Action gebaut (nur `linux/amd64`, nur Tag `latest`) und nach GHCR gepusht.
-- Betrieb als Docker Container auf `docker-host-nas`, Ziel ist ein NAS-Share.
+- Betrieb als Docker Container mit lokalem Volume für `/config`, Ziel ist ein NAS-Share.
 - yt-dlp bleibt aktuell (Auto-Update im Container plus wöchentlicher Image-Rebuild).
 - `DRY_RUN`-Modus zum gefahrlosen Testen.
 
@@ -42,7 +42,7 @@ Ein Container, ein Python-Prozess, eingebaute Job-Queue mit genau einem Worker.
 
 ```
  Browser  --->  FastAPI (REST + statische UI)
-                Scheduler (APScheduler): Discovery, Nachtsync, yt-dlp Update
+                Scheduler (APScheduler): Discovery, Nachtsync, yt-dlp Update, Log-Cleanup, DB-Backup 0:30
                 Job-Queue (1 Worker) ---> yt-dlp Subprozess (+ ffmpeg, deno)
                 DB (SQLite, optional MariaDB) in /config
                 Downloads nach /data (NAS-Share)
@@ -183,7 +183,7 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 | GET | `/api/playlists?type=sync\|oneshot` | Playlists mit Zählern, Größe, letztem Job |
 | GET | `/api/playlists/{id}` | Detailseite: alle DB-Felder plus Job-Verlauf (letzte 25) |
 | GET | `/api/playlists/{id}/files` | Dateien im Zielordner: Name, Größe, mtime, Summen nach Endung. Existiert der Ordner nicht, `exists: false`; Pfade außerhalb von `data_dir` werden ignoriert |
-| GET | `/api/playlists/{id}/videos` | Videogalerie: Cover (`00 - …jpg`) und pro Video Titel, Dauer, Datum, Aufrufe aus der `.info.json` (Parse-Cache pro Datei), Summe der Dauern |
+| GET | `/api/playlists/{id}/videos` | Videogalerie: Cover (`00 - …jpg`) und pro Video Titel, Dauer, Datum, Aufrufe sowie technische Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate; Parse-Cache pro Datei), Summe der Dauern |
 | GET | `/api/playlists/{id}/thumb?file=NAME` | Thumbnail aus dem Zielordner als Bild; nur `jpg/jpeg/png/webp`, kein `/` oder `..`, sonst 404 |
 | GET | `/api/playlists/{id}/video?file=NAME` | Videodatei streamen (`mkv/mp4/webm`) mit Range-Support für Spulen; gleiche Pfadsicherheit wie `thumb` |
 | GET | `/api/jobs?limit=50` | Jobhistorie |
@@ -204,7 +204,7 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - **Status:** aktueller Job (Fortschritt, Geschwindigkeit, ETA, Abbrechen), Zeitpläne mit Buttons, System (Kanal, yt-dlp, Platz, Queue), letzte Jobs, Banner (DRY RUN, `/data` nicht beschreibbar, fehlgeschlagene Oneshots, Queue pausiert). Das Log-Panel ist global und öffnet von jeder Ansicht.
 - **Sync-Playlists:** Titel (verlinkt auf die Detailseite, kleiner ↗-Link nach YouTube), Videos, Größe, letzter und nächster Sync, Status, Aktionen (Jetzt syncen, Ignorieren, Als Oneshot markieren).
 - **Oneshot-Playlists:** nach Download-Datum sortiert (sortierbar), Songs inkl. übersprungen/fehlgeschlagen, Größe, Dauer, Status, Aktionen (Erneut versuchen, Full Re-Run, Log, Als Sync markieren), Summenzeile.
-- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Größe) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Aufrufe und darunter eine Meta-Zeile mit technischen Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate), vorhandene Sidecar-Dateien als Chips – live gepollt. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC/Klick schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „Alle Dateien" und der Job-Verlauf der Playlist mit Log-Buttons.
+- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Größe) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Aufrufe und darunter eine Meta-Zeile mit technischen Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate), vorhandene Sidecar-Dateien als Chips – live gepollt. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC oder Klick auf den Hintergrund schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „Alle Dateien" und der Job-Verlauf der Playlist mit Log-Buttons.
 - Dark Mode, relative Zeiten mit Tooltip, responsive.
 
 ## 10. Nicht-funktionale Anforderungen
@@ -221,7 +221,8 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - `build.yml`: Push auf `main`, manuell und wöchentlich (Montag 04:17 UTC, ohne Cache). Ruft zuerst die Tests auf, baut `linux/amd64` und pusht **nur `latest`** nach `ghcr.io/<owner>/yt-playlist-sync`.
 - GitHub deaktiviert geplante Workflows nach 60 Tagen ohne Repo-Aktivität.
 - Das GHCR-Package ist public; `docker pull` funktioniert ohne Login.
-- Deployment per `docker-compose.example.yml` (nur Platzhalter), Updates über Watchtower.
+- `renovate.json`: Dependency-Updates montags vor 6 Uhr, Minor/Patch automerge, Major mit Label; Gruppen für Actions, Docker/Compose und Python.
+- Deployment per `docker-compose.example.yml` (echte Image-URL `ghcr.io/skoelle/yt-playlist-sync:latest`, Beispiel-Pfade; Pfade und Ping-URLs lokal anpassen), Volumes `/config`, `/data`, `/backup`, Updates über Watchtower.
 
 ## 12. Abnahmekriterien
 
