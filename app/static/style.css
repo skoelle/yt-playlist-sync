@@ -10,11 +10,12 @@ header { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:12p
          border-bottom:1px solid var(--line); }
 h1 { font-size:18px; margin:0; }
 h2 { font-size:15px; margin:0 0 8px; }
-nav a { margin-right:6px; padding:6px 12px; border-radius:6px; color:var(--fg); text-decoration:none; }
+nav { display:flex; flex-wrap:wrap; gap:6px; }
+nav a { padding:6px 12px; border-radius:6px; color:var(--fg); text-decoration:none; }
 nav a.active { background:var(--accent); color:#fff; }
 main { padding:16px 20px; max-width:1400px; margin:0 auto; }
 .muted { color:var(--muted); }
-.cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; margin-bottom:16px; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(300px,100%), 1fr)); gap:12px; margin-bottom:16px; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
 .cards .card { margin-bottom:0; }
 .bar { height:10px; background:var(--line); border-radius:5px; overflow:hidden; margin:8px 0 4px; }
@@ -30,6 +31,9 @@ th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line);
 thead th { background:var(--bg); font-weight:600; white-space:nowrap; }
 th[data-sort] { cursor:pointer; }
 table.kv { border:0; background:none; } table.kv th, table.kv td { border:0; padding:2px 8px 2px 0; }
+table.kv td { overflow-wrap:anywhere; }
+tr.kv-group th { font-size:12px; color:var(--muted); font-weight:600; padding-top:10px; letter-spacing:.02em; }
+tr.kv-msg td { font-size:12px; color:var(--muted); padding-top:2px; }
 td a { color:var(--accent); }
 td .sub { display:block; color:var(--muted); font-size:12px; }
 .badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line); }
@@ -76,6 +80,30 @@ a.vid-play:hover .vid-title, .vid-title a:hover { color:var(--accent); }
   .vid-td-thumb { width:132px; }
   .vid-thumb { width:124px; height:70px; }
   .vid-dur { right:8px; bottom:12px; }
+}
+@media (max-width:768px) {
+  .nav-suffix { display:none; }
+  header { padding:10px 12px; gap:10px; }
+  main { padding:12px; }
+  .banner { padding:8px 12px; }
+  .card { padding:10px 12px; }
+  .ct { display:block; border:0; background:none; }
+  .ct thead { display:block; border:0; }
+  .ct thead tr { display:flex; flex-wrap:wrap; gap:6px; background:none; }
+  .ct thead th { display:block; padding:4px 10px; border:1px solid var(--line); border-radius:999px;
+                 background:var(--card); font-size:12px; font-weight:600; white-space:nowrap; }
+  .ct thead th:not([data-sort]) { display:none; }
+  .ct tbody { display:block; }
+  .ct tbody tr { display:block; background:var(--card); border:1px solid var(--line); border-radius:8px;
+                 padding:8px 10px; margin-bottom:10px; }
+  .ct tbody td { display:block; padding:4px 0; border:0; }
+  .ct tbody td[data-label]::before { content:attr(data-label); display:block; font-size:11px;
+                                     color:var(--muted); font-weight:600; letter-spacing:.02em; }
+  .ct tbody td.ct-head { font-weight:600; font-size:15px; padding:0 0 6px;
+                         border-bottom:1px solid var(--line); margin-bottom:4px; }
+  .ct tbody td.ct-actions { display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+                            border-top:1px solid var(--line); margin-top:6px; padding-top:8px; }
+  #jobs-table td[data-label="#"] { display:none; }
 }
 .player { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.9); display:flex;
           align-items:center; justify-content:center; padding:16px; }

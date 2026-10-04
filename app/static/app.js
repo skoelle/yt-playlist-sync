@@ -35,7 +35,12 @@ function fmtDur(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
 }
-function fmtAbs(iso) { return iso ? new Date(iso).toLocaleString("en-US") : ""; }
+function fmtAbs(iso) {
+  return iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "";
+}
+function fmtAbsFull(iso) {
+  return iso ? new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "medium" }) : "";
+}
 function fmtClock(s) {
   s = Math.round(Number(s) || 0);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -61,7 +66,7 @@ function fmtRel(iso) {
   else txt = plural(Math.round(abs / 86400), "day", "days");
   return diff < 0 ? `${txt} ago` : `in ${txt}`;
 }
-const when = (iso) => iso ? `<span title="${esc(fmtAbs(iso))}">${esc(fmtRel(iso))}</span>` : "-";
+const when = (iso) => iso ? `<span title="${esc(fmtAbsFull(iso))}">${esc(fmtRel(iso))}</span>` : "-";
 const badge = (st) => `<span class="badge s-${esc(st)}">${esc(st)}</span>`;
 
 async function api(path, opts = {}) {
@@ -110,11 +115,12 @@ function renderBanners(st) {
   if (box._html !== html) { box.innerHTML = html; box._html = html; }
 }
 
-function runText(run) {
+function runHead(run) {
   if (!run) return "-";
   const when_ = run.finished_at || run.started_at;
-  return `${run.status} (${fmtRel(when_)})` + (run.message ? `: ${run.message}` : "");
+  return `${run.status} (${fmtRel(when_)})`;
 }
+function runMsg(run) { return run && run.message ? run.message : ""; }
 
 function renderStatus(st) {
   const cur = st.current;
@@ -128,10 +134,12 @@ function renderStatus(st) {
     const idx = cur.item_index ? `Video ${cur.item_index}/${cur.item_total} | ` : "";
     setText("cur-meta", `${idx}${cur.percent != null ? cur.percent.toFixed(1) + "% | " : ""}${cur.speed || ""} ${cur.eta ? "| ETA " + cur.eta : ""}`);
   }
-  setText("sch-d-last", runText(st.schedules.discovery.last));
   setText("sch-d-next", st.schedules.discovery.next ? `${fmtAbs(st.schedules.discovery.next)} (${fmtRel(st.schedules.discovery.next)})` : "-");
-  setText("sch-s-last", runText(st.schedules.sync.last));
+  setText("sch-d-last", runHead(st.schedules.discovery.last));
+  setText("sch-d-msg", runMsg(st.schedules.discovery.last));
   setText("sch-s-next", st.schedules.sync.next ? `${fmtAbs(st.schedules.sync.next)} (${fmtRel(st.schedules.sync.next)})` : "-");
+  setText("sch-s-last", runHead(st.schedules.sync.last));
+  setText("sch-s-msg", runMsg(st.schedules.sync.last));
   setText("sys-channel", st.channel);
   setText("sys-ytdlp", st.ytdlp_version);
   setText("sys-free", st.free_bytes == null ? "-" : `${fmtBytes(st.free_bytes)} of ${fmtBytes(st.total_bytes)}`);
@@ -139,12 +147,14 @@ function renderStatus(st) {
 }
 
 function jobRow(j, showTitle = true) {
+  const idCol = showTitle ? `<td data-label="#">${j.id}</td>` : `<td class="ct-head">#${j.id}</td>`;
   const titleCol = showTitle
-    ? `<td><a href="#playlist-${j.playlist_pk}">${esc(j.playlist_title)}</a></td>` : "";
-  return `<td>${j.id}</td>${titleCol}<td>${esc(j.trigger)}</td>
-    <td>${badge(j.status)}${j.error_summary ? `<span class="sub">${esc(j.error_summary)}</span>` : ""}</td>
-    <td>${esc(fmtDur(j.duration_s))}</td><td>${j.items_new}</td><td>${j.items_skipped}</td><td>${j.items_failed}</td>
-    <td><button data-action="show-log" data-job="${j.id}">Log</button>
+    ? `<td class="ct-head"><a href="#playlist-${j.playlist_pk}">${esc(j.playlist_title)}</a></td>` : "";
+  return `${idCol}${titleCol}<td data-label="Trigger">${esc(j.trigger)}</td>
+    <td data-label="Status">${badge(j.status)}${j.error_summary ? `<span class="sub">${esc(j.error_summary)}</span>` : ""}</td>
+    <td data-label="Duration">${esc(fmtDur(j.duration_s))}</td><td data-label="New">${j.items_new}</td>
+    <td data-label="Skipped">${j.items_skipped}</td><td data-label="Failed">${j.items_failed}</td>
+    <td class="ct-actions"><button data-action="show-log" data-job="${j.id}">Log</button>
     ${["queued", "running"].includes(j.status) ? `<button data-action="cancel" data-job="${j.id}" class="danger">Cancel</button>` : ""}</td>`;
 }
 
@@ -158,10 +168,11 @@ function syncRow(p) {
     (p.remote_status === "removed" ? ` <span class="badge s-failed">removed</span>` : "") +
     (p.ignored ? ` <span class="badge">ignored</span>` : "");
   const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
-  return `<td>${title}</td><td>${videos}</td><td>${fmtBytes(p.size_bytes)}</td><td>${last}</td>
-    <td>${p.ignored || p.remote_status === "removed" ? "-" : nextSync ? when(nextSync) : "-"}</td>
-    <td>${badge(p.state)}${err}</td>
-    <td><button data-action="run" data-id="${p.id}">Sync now</button>
+  return `<td class="ct-head">${title}</td><td data-label="Videos">${videos}</td><td data-label="Size">${fmtBytes(p.size_bytes)}</td>
+    <td data-label="Last sync">${last}</td>
+    <td data-label="Next sync">${p.ignored || p.remote_status === "removed" ? "-" : nextSync ? when(nextSync) : "-"}</td>
+    <td data-label="Status">${badge(p.state)}${err}</td>
+    <td class="ct-actions"><button data-action="run" data-id="${p.id}">Sync now</button>
     <button data-action="ignore" data-id="${p.id}" data-ignored="${p.ignored ? 0 : 1}">${p.ignored ? "Reactivate" : "Ignore"}</button>
     <button data-action="to-oneshot" data-id="${p.id}">Mark as oneshot</button></td>`;
 }
@@ -192,10 +203,11 @@ function oneshotRow(p) {
   if (p.state === "done") acts.push(`<button data-action="rerun" data-id="${p.id}">Full Re-Run</button>`);
   if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
   acts.push(`<button data-action="to-sync" data-id="${p.id}">Mark as sync</button>`);
-  return `<td><a href="#playlist-${p.id}">${esc(p.title)}</a>
-    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a></td><td>${date}</td><td>${songs}</td>
-    <td>${fmtBytes(p.size_bytes)}</td><td>${p.last_job ? esc(fmtDur(p.last_job.duration_s)) : "-"}</td>
-    <td>${badge(p.state)}${err}</td><td>${acts.join(" ")}</td>`;
+  return `<td class="ct-head"><a href="#playlist-${p.id}">${esc(p.title)}</a>
+    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a></td>
+    <td data-label="Downloaded on">${date}</td><td data-label="Songs">${songs}</td>
+    <td data-label="Size">${fmtBytes(p.size_bytes)}</td><td data-label="Duration">${p.last_job ? esc(fmtDur(p.last_job.duration_s)) : "-"}</td>
+    <td data-label="Status">${badge(p.state)}${err}</td><td class="ct-actions">${acts.join(" ")}</td>`;
 }
 
 function renderOneshots() {
