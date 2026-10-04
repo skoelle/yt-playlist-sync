@@ -146,11 +146,13 @@ yt-dlp \
 - Beim Start werden `running`-Jobs auf `interrupted` gesetzt und neu eingereiht.
 - Beim Beenden: SIGTERM an yt-dlp, nach 30 s SIGKILL. `.part` Dateien werden fortgesetzt.
 - HTTP 429 oder Bot-Check: Job bricht ab (`failed`), Queue pausiert 30 Minuten.
+- **HTTP 403** (z. B. `unable to download video data: HTTP Error 403: Forbidden`): Job bricht sofort ab statt durch die Playlist weiterzureichen – `failed`, Playlist `failed`, Queue pausiert 30 Minuten wie bei 429. Zusätzlich wird ein yt-dlp-Update-Check angestoßen (siehe 6.7). Auch ein 403 beim Auflisten der Playlist löst Abbruch und Pause aus. 403 gilt als temporär (nicht `permanent`): die Videos zählen als `missing`, Retry und nächster Nachtlauf bleiben möglich.
 
 ### 6.7 yt-dlp Updates
 - Beim Start (nach 10 s) und täglich: `pip install --upgrade --target /config/ytdlp-lib "yt-dlp[default]"`. Das `default`-Extra ist nötig, weil `yt-dlp-ejs` (der JavaScript-Challenge-Solver) nur dort hängt und exakt gepinnt ist (`==`): passt die Version in der Env nicht mehr, installiert pip den passenden ejs mit ins Target. Der yt-dlp Prozess bekommt `PYTHONPATH=/config/ytdlp-lib`. Bei Fehlern bleibt die Image-Version.
 - Wenn sich durch das Update die wirksame yt-dlp-Version geändert hat, läuft danach `yt-dlp --rm-cache-dir`. (Auf pip-Output wird nicht geprüft: `pip --target` installiert und meldet `Successfully installed` bei jedem Lauf.) Der Cache unter `/config/.cache/yt-dlp` (HOME des Container-Users ist `/config`) enthält gecachte Signaturen und Client-IDs, die nach einem Update veraltet sind und die Extraktion brechen können. Ohne Versionsänderung bleibt der Cache unangetastet.
 - Das tägliche Update wartet bis zu 3 Stunden auf eine leere Queue.
+- **Dritter Auslöser HTTP 403:** Nach einem wegen 403 abgebrochenen Job stößt der Scheduler einen Update-Check an (`schedule_update_after_403`). Er läuft nach dem Abbruch während der Queue-Pause, wartet bis auf den finalisierten Job und nutzt dieselben pip-/Versions-/Cache-Schritte wie der Start-Update. Tages-Update und 403-Update laufen über einen `asyncio.Lock` serialisiert, damit kein zwei pip-Läufe gleichzeitig ins gleiche Target schreiben.
 - Die Action baut das Image wöchentlich ohne Cache neu. Die UI zeigt die yt-dlp Version.
 
 ### 6.8 Dateirechte
@@ -263,3 +265,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Neu: Nächtliches SQLite-Backup um 0:30 nach `BACKUP_DIR` mit Rotation `BACKUP_KEEP` (siehe 6.9).
 - Neu: Das nächtliche Backup enthält zusätzlich die Download-Archive als `archives-*.tar.gz` (siehe 6.9).
 - Neu: Die stündliche Discovery wird übersprungen, solange die Queue nicht leer ist; der manuelle Button überspringt nicht (siehe 6.1).
+- Neu: HTTP 403 bricht Jobs sofort ab (Pause wie 429, Playlist `failed`) und stößt einen yt-dlp-Update-Check an (siehe 6.6/6.7).

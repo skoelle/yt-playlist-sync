@@ -32,10 +32,10 @@ FastAPI (app/main.py, Lifespan)
 | `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `backup_archives` (tar.gz von `archives/`), `sqlite_path`, Integritätschecks, Rotation `BACKUP_KEEP` je Namensmuster |
 | `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url`, `read_video_entries` (Galerie inkl. Tech-Metadaten), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
-| `app/runner.py` | `RunParams`/`RunResult`, `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit-Erkennung |
-| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States |
+| `app/runner.py` | `RunParams`/`RunResult` (Feld `forbidden` für 403-Abbruch), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung |
+| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States, Pause bei 429/403, `on_forbidden`-Callback |
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen), `run_discovery` mit Leerlistenschutz |
-| `app/scheduler.py` | Cron-Jobs, Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung |
+| `app/scheduler.py` | Cron-Jobs, Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update) |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
 | `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
@@ -72,7 +72,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **64 Tests grün** (`pytest -q`, ~13 s).
+- Bestehender Stand: **67 Tests grün** (`pytest -q`, ~13 s).
 
 ## Harte Regeln
 
@@ -84,7 +84,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 4. **Kein YouTube-Login, keine Secrets, kein API-Key.** `DATABASE_URL` und Healthchecks-URLs sind Deployment-Detail.
 5. **Oneshot `done` bleibt `done`.** Nur `full_rerun` darf sie erneut anfassen; Retry nur bei `failed`.
 6. **Timestamps UTC** (naiv, `db.utcnow()`), UI/Spec-Zeitzone nur für Cron und Anzeige.
-7. **Rate-Limit-Schutz:** bei HTTP 429/Bot-Check Job abbrechen und Queue 30 min pausieren (`RATE_LIMIT_PAUSE`), Sleep-Intervalle beibehalten.
+7. **Rate-Limit-Schutz:** bei HTTP 429/Bot-Check oder HTTP 403 Job abbrechen und Queue 30 min pausieren (`RATE_LIMIT_PAUSE`); bei 403 zusätzlich den yt-dlp-Update-Check anstoßen. Sleep-Intervalle beibehalten.
 8. **Kein Root im Container**, `PUID`/`PGID`/`gosu` respektieren, Pfade aus Titeln sanitizen (`paths.sanitize_folder_name`).
 9. **Tests ohne Netzwerk**, Stub statt echtem yt-dlp; `YTDLP_BIN` ist die Austauschstelle.
 10. Kein Build-Step für die UI: HTML/JS/CSS bleiben vanilla, Daten kommen per `fetch`, **kein `location.reload`** (davon gibt es einen Test).
@@ -113,7 +113,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (64), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (67), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

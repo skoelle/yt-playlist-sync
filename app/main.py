@@ -34,6 +34,7 @@ def create_app(settings: Settings | None = None, start_background: bool = True) 
             log.error("DATA_DIR %s is not writable, downloads will be paused", cfg.data_dir)
         queue = JobQueue(cfg)
         scheduler = AppScheduler(cfg, queue)
+        queue.on_forbidden = scheduler.schedule_update_after_403
         app.state.settings, app.state.queue, app.state.scheduler = cfg, queue, scheduler
         if start_background:
             await queue.start()

@@ -64,6 +64,10 @@ def main():
             log_err(f"ERROR: [youtube] {vid}: HTTP Error 429: Too Many Requests")
             time.sleep(60)
             return 1
+        if mode == "forbidden":
+            log_err("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+            time.sleep(60)
+            return 1
         name = f"{i:02d} - {v['title']} [{vid}].mp4"
         print(f"[download] Destination: {out_dir / name}", flush=True)
         for pct in ("10.0%", "55.5%", "100.0%"):

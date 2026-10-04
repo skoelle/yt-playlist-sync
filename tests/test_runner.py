@@ -78,6 +78,19 @@ def test_rate_limit_stops_job_quickly(tmp_path, stub):
     assert time.time() - t0 < 20
 
 
+def test_forbidden_stops_job_quickly(tmp_path, stub):
+    """HTTP 403 aborts the job immediately (SPEC 6.6) instead of grinding through the playlist."""
+    stub.data_ref["fail"] = {"vid00000001": "forbidden"}
+    stub.save()
+    t0 = time.time()
+    res = run(params(tmp_path, stub))
+    assert res.forbidden and not res.rate_limited and not res.success
+    assert "403" in res.error_summary
+    assert time.time() - t0 < 20
+    assert not (tmp_path / "data" / "Folder [PLaaa]").exists() or \
+        not list((tmp_path / "data" / "Folder [PLaaa]").glob("*.mp4"))
+
+
 def test_cancel_running_job(tmp_path, stub):
     stub.data_ref["slow"] = 2
     stub.save()
