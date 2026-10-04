@@ -14,11 +14,12 @@ from app.config import Settings  # noqa: E402
 
 def test_defaults(monkeypatch):
     for k in ("ONESHOT_KEYWORD", "DISCOVERY_INTERVAL_MIN", "DISCOVERY_INTERVAL_MAX", "SYNC_CRON",
-              "DRY_RUN", "DATABASE_URL", "BACKUP_DIR", "BACKUP_KEEP"):
+              "SYNC_JITTER", "DRY_RUN", "DATABASE_URL", "BACKUP_DIR", "BACKUP_KEEP"):
         monkeypatch.delenv(k, raising=False)
     s = Settings(youtube_channel="@beispielkanal")
     assert s.oneshot_keyword == "setlist"
     assert s.sync_cron == "0 3 * * *" and s.ytdlp_update_cron == "30 2 * * *"
+    assert s.sync_jitter == 30
     assert s.discovery_interval_min == 50 and s.discovery_interval_max == 70
     assert s.dry_run is False
     assert s.backup_keep == 7 and s.backup_dir == Path("/backup")
@@ -53,3 +54,5 @@ def test_invalid_cron_and_sleep():
         Settings(youtube_channel="@x", discovery_interval_min=70, discovery_interval_max=50)
     with pytest.raises(ValidationError):
         Settings(youtube_channel="@x", discovery_interval_min=0)
+    with pytest.raises(ValidationError):
+        Settings(youtube_channel="@x", sync_jitter=-1)

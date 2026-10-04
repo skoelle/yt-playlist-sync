@@ -123,6 +123,22 @@ def test_discovery_scheduled_with_random_interval(cfg, monkeypatch):
     assert ran == [False]
 
 
+def test_sync_cron_has_jitter(cfg):
+    """Nachtlauf startet 0–30 min nach dem Cron-Slot statt exakt, 0 schaltet den Jitter ab (SPEC 6.5)."""
+    queue = JobQueue(cfg)
+
+    async def trigger_jitter(sched):
+        await sched.start()
+        try:
+            return sched.scheduler.get_job("sync").trigger.jitter
+        finally:
+            await sched.stop()
+
+    assert asyncio.run(trigger_jitter(AppScheduler(cfg, queue))) == 1800
+    cfg.sync_jitter = 0
+    assert asyncio.run(trigger_jitter(AppScheduler(cfg, queue))) is None
+
+
 def test_job_gap_between_playlists(cfg, stub):
     """Zwei Jobs laufen nicht metronomisch hintereinander ab, sondern mit zufälliger Pause (SPEC 6.6)."""
     cfg.job_gap_min = 1

@@ -14,6 +14,7 @@ services:
       DISCOVERY_INTERVAL_MIN: "50"
       DISCOVERY_INTERVAL_MAX: "70"
       SYNC_CRON: "0 3 * * *"
+      SYNC_JITTER: "30"
       HC_DISCOVERY_URL: "${HC_DISCOVERY_URL:-}"
       HC_SYNC_URL: "${HC_SYNC_URL:-}"
       BACKUP_KEEP: "7"

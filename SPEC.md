@@ -72,6 +72,7 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 | `ONESHOT_KEYWORD` | `setlist` | Komma-getrennte Schlüsselwörter im Titel, case-insensitive (z. B. `setlist,concert`) |
 | `DISCOVERY_INTERVAL_MIN` / `DISCOVERY_INTERVAL_MAX` | `50` / `70` | Discovery-Intervall in Minuten (jeder Lauf zufällig in diesem Bereich) |
 | `SYNC_CRON` | `0 3 * * *` | Nachtsync |
+| `SYNC_JITTER` | `30` | Zufälliger Nachlauf nach `SYNC_CRON` in Minuten (`0` = aus) |
 | `YTDLP_UPDATE_CRON` | `30 2 * * *` | yt-dlp Update |
 | `TZ` | `Europe/Berlin` | Zeitzone |
 | `DATA_DIR` / `CONFIG_DIR` | `/data` / `/config` | Pfade im Container |
@@ -138,6 +139,7 @@ yt-dlp \
 
 ### 6.5 Sync-Logik (nachts)
 - `SYNC_CRON` reiht für jede Sync-Playlist (nicht `removed`, nicht `ignored`) einen Job ein.
+- **Jitter:** Der Lauf startet nicht exakt auf den Cron-Slot, sondern `random.uniform(0, SYNC_JITTER)` Minuten danach (APScheduler-Trigger-`jitter`, Default 30 → 3:00–3:30 Uhr, jeden Tag anders). `sync.next` in `GET /api/status` zeigt den verzögerten Zeitpunkt; `SYNC_JITTER=0` ergibt das alte Verhalten (exakter Slot).
 - Das Archive sorgt dafür, dass nur neue Videos geladen werden.
 - Ping `HC_SYNC_URL/start`, nach allen Jobs Erfolg oder `/fail`.
 - Fehlgeschlagene Sync-Playlists werden in der nächsten Nacht erneut versucht.
@@ -271,3 +273,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Neu: HTTP 403 bricht Jobs sofort ab (Pause wie 429, Playlist `failed`) und stößt einen yt-dlp-Update-Check an (siehe 6.6/6.7).
 - Neu: Zufällige Pause von `JOB_GAP_MIN`..`JOB_GAP_MAX` Sekunden zwischen zwei Jobs, damit yt-dlp-Starts nicht metronomisch sind (siehe 6.6).
 - Neu: Discovery-Intervall statt Cron: `DISCOVERY_INTERVAL_MIN`/`MAX` (Default 50/70 Minuten, zufällig pro Lauf); `DISCOVERY_CRON` wird nicht mehr ausgewertet (siehe 6.1).
+- Neu: Nachtlauf mit Jitter: `SYNC_JITTER` (Default 30 Minuten) verzögert den Sync-Slot zufällig, `sync.next` zeigt die echte Zeit (siehe 6.5).

@@ -33,11 +33,19 @@ class AppScheduler:
         self.scheduler = AsyncIOScheduler(timezone=settings.tzinfo)
         self._update_lock = asyncio.Lock()
 
+    def _cron_trigger(self, expr: str, jitter_minutes: int) -> CronTrigger:
+        """Cron trigger with a random 0..jitter delay after each slot (from_crontab has no jitter)."""
+        f = expr.split()  # 5 fields, already validated by Settings
+        return CronTrigger(
+            minute=f[0], hour=f[1], day=f[2], month=f[3], day_of_week=f[4],
+            timezone=self.settings.tzinfo, jitter=jitter_minutes * 60 or None,
+        )
+
     async def start(self) -> None:
         s = self.settings
         self._schedule_discovery()
         self.scheduler.add_job(
-            self.sync_job, CronTrigger.from_crontab(s.sync_cron, timezone=s.tzinfo),
+            self.sync_job, self._cron_trigger(s.sync_cron, s.sync_jitter),
             id="sync", max_instances=1, coalesce=True,
         )
         self.scheduler.add_job(

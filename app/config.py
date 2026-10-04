@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     discovery_interval_min: int = 50
     discovery_interval_max: int = 70
     sync_cron: str = "0 3 * * *"
+    sync_jitter: int = 30
     ytdlp_update_cron: str = "30 2 * * *"
     tz: str = "Europe/Berlin"
     data_dir: Path = Path("/data")
@@ -69,6 +70,8 @@ class Settings(BaseSettings):
             raise ValueError("JOB_GAP_MIN must be >= 0 and <= JOB_GAP_MAX")
         if self.discovery_interval_min < 1 or self.discovery_interval_min > self.discovery_interval_max:
             raise ValueError("DISCOVERY_INTERVAL_MIN must be >= 1 and <= DISCOVERY_INTERVAL_MAX")
+        if self.sync_jitter < 0:
+            raise ValueError("SYNC_JITTER must be >= 0")
         if self.backup_keep < 0:
             raise ValueError("BACKUP_KEEP must be >= 0")
         return self
