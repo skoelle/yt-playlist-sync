@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
+import re
 from pathlib import Path
 
 import pytest
@@ -71,6 +72,25 @@ def test_ui_sync_tab_has_summary_and_sort():
     assert 'id="sync-summary"' in html
     assert 'data-sort="title"' in sync_head and 'data-sort="last"' in sync_head
     assert "function renderSyncs" in js and "syncSortValue" in js
+
+
+def test_ui_is_english():
+    root = Path(__file__).parent.parent / "app" / "static"
+    html = (root / "index.html").read_text()
+    js = (root / "app.js").read_text()
+    assert '<html lang="en">' in html and 'lang="de"' not in html
+    for src in (html, js):
+        assert not re.search(r"[äöüßÄÖÜ]", src)
+    german = [
+        "Abbrechen", "Schließen", "Zeitpläne", "Aktueller Job", "Kein Job aktiv",
+        "Warteschlange", "Freier Platz", "Letzte Jobs", "Übersprungen", "Aktionen",
+        "Heruntergeladen", "Erneut versuchen", "Jetzt syncen", "Als Oneshot markieren",
+        "Vorheriges", "Nächstes", "Playlist-Daten", "Job-Verlauf",
+        "Dateien,", "nicht verf", "erreichbar", "de-DE",
+    ]
+    for src in (html, js):
+        for word in german:
+            assert word not in src, word
 
 
 def test_playlist_detail_and_files(client):

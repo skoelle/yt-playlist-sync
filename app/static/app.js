@@ -35,28 +35,31 @@ function fmtDur(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`;
 }
-function fmtAbs(iso) { return iso ? new Date(iso).toLocaleString("de-DE") : ""; }
+function fmtAbs(iso) { return iso ? new Date(iso).toLocaleString("en-US") : ""; }
 function fmtClock(s) {
   s = Math.round(Number(s) || 0);
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   const pad = (n) => String(n).padStart(2, "0");
   return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
+function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
 function fmtUploadDate(s) {
   const m = /^(\d{4})(\d{2})(\d{2})$/.exec(String(s || ""));
-  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+  if (!m) return "";
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    .toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
-function fmtViews(n) { return Number(n).toLocaleString("de-DE") + " Aufrufe"; }
+function fmtViews(n) { return `${Number(n).toLocaleString("en-US")} ${Number(n) === 1 ? "view" : "views"}`; }
 function fmtRel(iso) {
   if (!iso) return "-";
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
   const abs = Math.abs(diff);
   let txt;
-  if (abs < 60) txt = "wenigen Sekunden";
-  else if (abs < 3600) txt = Math.round(abs / 60) + " Min.";
-  else if (abs < 86400) txt = Math.round(abs / 3600) + " Std.";
-  else txt = Math.round(abs / 86400) + " Tagen";
-  return diff < 0 ? `vor ${txt}` : `in ${txt}`;
+  if (abs < 60) txt = "a few seconds";
+  else if (abs < 3600) txt = Math.round(abs / 60) + " min";
+  else if (abs < 86400) txt = Math.round(abs / 3600) + " hr";
+  else txt = plural(Math.round(abs / 86400), "day", "days");
+  return diff < 0 ? `${txt} ago` : `in ${txt}`;
 }
 const when = (iso) => iso ? `<span title="${esc(fmtAbs(iso))}">${esc(fmtRel(iso))}</span>` : "-";
 const badge = (st) => `<span class="badge s-${esc(st)}">${esc(st)}</span>`;
@@ -98,10 +101,10 @@ function syncRows(tbody, items, keyFn, htmlFn) {
 
 function renderBanners(st) {
   const items = [];
-  if (st.dry_run) items.push(["warn", "DRY RUN: es werden keine Dateien heruntergeladen."]);
-  if (!st.data_writable) items.push(["bad", "Zielordner /data ist nicht beschreibbar. Downloads pausieren."]);
-  if (st.failed_oneshots) items.push(["bad", `${st.failed_oneshots} Oneshot-Playlist(s) mit Fehler. Siehe Tab Oneshot-Playlists.`]);
-  if (st.paused_until) items.push(["warn", `Warteschlange pausiert bis ${fmtAbs(st.paused_until)} (Rate-Limit).`]);
+  if (st.dry_run) items.push(["warn", "DRY RUN: no files will be downloaded."]);
+  if (!st.data_writable) items.push(["bad", "Target folder /data is not writable. Downloads are paused."]);
+  if (st.failed_oneshots) items.push(["bad", `${st.failed_oneshots} oneshot playlist(s) failed. See the Oneshot Playlists tab.`]);
+  if (st.paused_until) items.push(["warn", `Queue paused until ${fmtAbs(st.paused_until)} (rate limit).`]);
   const html = items.map(([c, t]) => `<div class="banner ${c}">${esc(t)}</div>`).join("");
   const box = $("#banners");
   if (box._html !== html) { box.innerHTML = html; box._html = html; }
@@ -131,8 +134,8 @@ function renderStatus(st) {
   setText("sch-s-next", st.schedules.sync.next ? `${fmtAbs(st.schedules.sync.next)} (${fmtRel(st.schedules.sync.next)})` : "-");
   setText("sys-channel", st.channel);
   setText("sys-ytdlp", st.ytdlp_version);
-  setText("sys-free", st.free_bytes == null ? "-" : `${fmtBytes(st.free_bytes)} von ${fmtBytes(st.total_bytes)}`);
-  setText("sys-queue", st.queue.length ? st.queue.map((q) => q.playlist_title).join(", ") : "leer");
+  setText("sys-free", st.free_bytes == null ? "-" : `${fmtBytes(st.free_bytes)} of ${fmtBytes(st.total_bytes)}`);
+  setText("sys-queue", st.queue.length ? st.queue.map((q) => q.playlist_title).join(", ") : "empty");
 }
 
 function jobRow(j, showTitle = true) {
@@ -142,25 +145,25 @@ function jobRow(j, showTitle = true) {
     <td>${badge(j.status)}${j.error_summary ? `<span class="sub">${esc(j.error_summary)}</span>` : ""}</td>
     <td>${esc(fmtDur(j.duration_s))}</td><td>${j.items_new}</td><td>${j.items_skipped}</td><td>${j.items_failed}</td>
     <td><button data-action="show-log" data-job="${j.id}">Log</button>
-    ${["queued", "running"].includes(j.status) ? `<button data-action="cancel" data-job="${j.id}" class="danger">Abbrechen</button>` : ""}</td>`;
+    ${["queued", "running"].includes(j.status) ? `<button data-action="cancel" data-job="${j.id}" class="danger">Cancel</button>` : ""}</td>`;
 }
 
 function syncRow(p) {
   const st = state.status;
   const nextSync = st && st.schedules.sync.next;
-  const videos = `${p.downloaded_count} / ${p.remote_item_count ?? "?"}` + (p.skipped_count ? `<span class="sub">${p.skipped_count} nicht verfügbar</span>` : "");
+  const videos = `${p.downloaded_count} / ${p.remote_item_count ?? "?"}` + (p.skipped_count ? `<span class="sub">${p.skipped_count} not available</span>` : "");
   const last = p.last_sync_at ? when(p.last_sync_at) : "-";
   const title = `<a href="#playlist-${p.id}">${esc(p.title)}</a>` +
-    ` <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="YouTube öffnen">↗</a>` +
+    ` <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a>` +
     (p.remote_status === "removed" ? ` <span class="badge s-failed">removed</span>` : "") +
-    (p.ignored ? ` <span class="badge">ignoriert</span>` : "");
+    (p.ignored ? ` <span class="badge">ignored</span>` : "");
   const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
   return `<td>${title}</td><td>${videos}</td><td>${fmtBytes(p.size_bytes)}</td><td>${last}</td>
     <td>${p.ignored || p.remote_status === "removed" ? "-" : nextSync ? when(nextSync) : "-"}</td>
     <td>${badge(p.state)}${err}</td>
-    <td><button data-action="run" data-id="${p.id}">Jetzt syncen</button>
-    <button data-action="ignore" data-id="${p.id}" data-ignored="${p.ignored ? 0 : 1}">${p.ignored ? "Reaktivieren" : "Ignorieren"}</button>
-    <button data-action="to-oneshot" data-id="${p.id}">Als Oneshot markieren</button></td>`;
+    <td><button data-action="run" data-id="${p.id}">Sync now</button>
+    <button data-action="ignore" data-id="${p.id}" data-ignored="${p.ignored ? 0 : 1}">${p.ignored ? "Reactivate" : "Ignore"}</button>
+    <button data-action="to-oneshot" data-id="${p.id}">Mark as oneshot</button></td>`;
 }
 
 function oneshotSortValue(p, key) {
@@ -177,20 +180,20 @@ function oneshotSortValue(p, key) {
 
 function oneshotRow(p) {
   const date = p.completed_at ? when(p.completed_at)
-    : p.first_downloaded_at ? `${when(p.first_downloaded_at)}<span class="sub">${p.state === "running" ? "läuft" : "nicht abgeschlossen"}</span>` : "-";
+    : p.first_downloaded_at ? `${when(p.first_downloaded_at)}<span class="sub">${p.state === "running" ? "running" : "incomplete"}</span>` : "-";
   const extra = [];
-  if (p.skipped_count) extra.push(`${p.skipped_count} nicht verfügbar`);
-  if (p.failed_count) extra.push(`${p.failed_count} fehlgeschlagen`);
+  if (p.skipped_count) extra.push(`${p.skipped_count} not available`);
+  if (p.failed_count) extra.push(`${p.failed_count} failed`);
   const songs = `${p.downloaded_count} / ${p.remote_item_count ?? "?"}` + (extra.length ? `<span class="sub">${extra.join(", ")}</span>` : "");
   const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
   const acts = [];
-  if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Erneut versuchen</button>`);
-  if (p.state === "new") acts.push(`<button data-action="run" data-id="${p.id}">Jetzt laden</button>`);
+  if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Retry</button>`);
+  if (p.state === "new") acts.push(`<button data-action="run" data-id="${p.id}">Download now</button>`);
   if (p.state === "done") acts.push(`<button data-action="rerun" data-id="${p.id}">Full Re-Run</button>`);
   if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
-  acts.push(`<button data-action="to-sync" data-id="${p.id}">Als Sync markieren</button>`);
+  acts.push(`<button data-action="to-sync" data-id="${p.id}">Mark as sync</button>`);
   return `<td><a href="#playlist-${p.id}">${esc(p.title)}</a>
-    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="YouTube öffnen">↗</a></td><td>${date}</td><td>${songs}</td>
+    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a></td><td>${date}</td><td>${songs}</td>
     <td>${fmtBytes(p.size_bytes)}</td><td>${p.last_job ? esc(fmtDur(p.last_job.duration_s)) : "-"}</td>
     <td>${badge(p.state)}${err}</td><td>${acts.join(" ")}</td>`;
 }
@@ -281,46 +284,46 @@ function renderDetail(p, f, vids) {
   stats.push(fmtBytes(f.exists ? f.total_bytes : p.size_bytes));
   setText("detail-stats", stats.join(" · "));
   const badges = [badge(p.type), badge(p.state)];
-  if (p.ignored) badges.push('<span class="badge">ignoriert</span>');
+  if (p.ignored) badges.push('<span class="badge">ignored</span>');
   if (p.remote_status === "removed") badges.push('<span class="badge s-failed">removed</span>');
   const bhtml = badges.join(" ");
   const bbox = $("#detail-badges");
   if (bbox._html !== bhtml) { bbox.innerHTML = bhtml; bbox._html = bhtml; }
 
   const acts = [];
-  if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Erneut versuchen</button>`);
+  if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Retry</button>`);
   if (p.state === "new" || p.state === "idle") {
-    acts.push(`<button data-action="run" data-id="${p.id}">${p.type === "oneshot" ? "Jetzt laden" : "Jetzt synchronisieren"}</button>`);
+    acts.push(`<button data-action="run" data-id="${p.id}">${p.type === "oneshot" ? "Download now" : "Sync now"}</button>`);
   }
   if (p.state === "done" && p.type === "oneshot") {
     acts.push(`<button data-action="rerun" data-id="${p.id}">Full Re-Run</button>`);
   }
   if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
-  acts.push(`<button data-action="ignore" data-id="${p.id}" data-ignored="${p.ignored ? 0 : 1}">${p.ignored ? "Reaktivieren" : "Ignorieren"}</button>`);
-  if (p.type === "sync") acts.push(`<button data-action="to-oneshot" data-id="${p.id}">Als Oneshot markieren</button>`);
-  else acts.push(`<button data-action="to-sync" data-id="${p.id}">Als Sync markieren</button>`);
+  acts.push(`<button data-action="ignore" data-id="${p.id}" data-ignored="${p.ignored ? 0 : 1}">${p.ignored ? "Reactivate" : "Ignore"}</button>`);
+  if (p.type === "sync") acts.push(`<button data-action="to-oneshot" data-id="${p.id}">Mark as oneshot</button>`);
+  else acts.push(`<button data-action="to-sync" data-id="${p.id}">Mark as sync</button>`);
   const ahtml = acts.join(" ");
   const abox = $("#detail-actions");
   if (abox._html !== ahtml) { abox.innerHTML = ahtml; abox._html = ahtml; }
 
   const kv = [
-    ["Playlist-ID", `<code>${esc(p.playlist_id)}</code>`],
-    ["Typ", esc(p.type)],
+    ["Playlist ID", `<code>${esc(p.playlist_id)}</code>`],
+    ["Type", esc(p.type)],
     ["Status", badge(p.state)],
-    ["Ordner", `<code>${esc(p.folder_name || "-")}</code>`],
+    ["Folder", `<code>${esc(p.folder_name || "-")}</code>`],
     ["Videos (YouTube)", p.remote_item_count ?? "-"],
-    ["Heruntergeladen", p.downloaded_count],
-    ["Nicht verfügbar", p.skipped_count],
-    ["Fehlgeschlagen", p.failed_count],
-    ["Größe (DB)", fmtBytes(p.size_bytes)],
-    ["Remote-Status", esc(p.remote_status || "-")],
-    ["Ignoriert", p.ignored ? "ja" : "nein"],
-    ["Erstmals gesehen", when(p.first_seen_at)],
-    ["Zuletzt gesehen", when(p.last_seen_at)],
-    ["Erster Download", when(p.first_downloaded_at)],
-    ["Abgeschlossen", when(p.completed_at)],
-    ["Letzter Sync", when(p.last_sync_at)],
-    ["Letzter Job", p.last_job
+    ["Downloaded", p.downloaded_count],
+    ["Not available", p.skipped_count],
+    ["Failed", p.failed_count],
+    ["Size (DB)", fmtBytes(p.size_bytes)],
+    ["Remote status", esc(p.remote_status || "-")],
+    ["Ignored", p.ignored ? "yes" : "no"],
+    ["First seen", when(p.first_seen_at)],
+    ["Last seen", when(p.last_seen_at)],
+    ["First download", when(p.first_downloaded_at)],
+    ["Completed", when(p.completed_at)],
+    ["Last sync", when(p.last_sync_at)],
+    ["Last job", p.last_job
       ? `#${p.last_job.id} · ${esc(p.last_job.trigger)} · ${badge(p.last_job.status)} · ${when(p.last_job.finished_at || p.last_job.started_at)}`
       : "-"],
   ];
@@ -332,11 +335,11 @@ function renderDetail(p, f, vids) {
   const vnone = $("#detail-videos-none");
   const vwrap = $("#detail-videos-wrap");
   if (!vids.exists) {
-    vnone.textContent = "Ordner existiert (noch) nicht – Videos erscheinen hier, sobald der erste Download lief.";
+    vnone.textContent = "Folder does not exist (yet) – files will appear here after the first download.";
     vnone.hidden = false;
     vwrap.hidden = true;
   } else if (!vids.video_count) {
-    vnone.textContent = "Keine Videodateien gefunden.";
+    vnone.textContent = "No video files found.";
     vnone.hidden = false;
     vwrap.hidden = true;
   } else {
@@ -354,7 +357,7 @@ function renderDetail(p, f, vids) {
     $("#detail-files-wrap").hidden = false;
     const chips = Object.entries(f.by_ext).sort((a, b) => a[0] < b[0] ? -1 : 1)
       .map(([e, n]) => `${n}× .${e || "?"}`).join(", ");
-    setText("detail-files-summary", `— ${f.total_files} Dateien, ${fmtBytes(f.total_bytes)}${chips ? ` (${chips})` : ""}`);
+    setText("detail-files-summary", `— ${plural(f.total_files, "file", "files")}, ${fmtBytes(f.total_bytes)}${chips ? ` (${chips})` : ""}`);
     syncRows($("#detail-files-table tbody"), f.files, (x) => x.name, (x) =>
       `<td>${esc(x.name)}</td><td>${fmtBytes(x.size_bytes)}</td><td>${when(x.modified_at)}</td>`);
   }
@@ -457,7 +460,7 @@ async function tick() {
     }
     if (state.log.open) await pollLog();
   } catch (err) {
-    $("#banners").innerHTML = `<div class="banner bad">Backend nicht erreichbar: ${esc(err.message)}</div>`;
+    $("#banners").innerHTML = `<div class="banner bad">Backend not reachable: ${esc(err.message)}</div>`;
     $("#banners")._html = null;
   } finally {
     state.busy = false;
@@ -490,14 +493,14 @@ async function act(action, el) {
       case "run": await api(`/playlists/${id}/run`, { method: "POST" }); break;
       case "retry": await api(`/playlists/${id}/retry`, { method: "POST" }); break;
       case "rerun":
-        if (!confirm("Playlist erneut prüfen und fehlende Videos laden? Vorhandene Dateien bleiben erhalten.")) return;
+        if (!confirm("Re-check this playlist and download missing videos? Existing files are kept.")) return;
         await api(`/playlists/${id}/rerun`, { method: "POST" }); break;
       case "ignore": await api(`/playlists/${id}/ignore`, { method: "POST", body: { ignored: el.dataset.ignored === "1" } }); break;
       case "to-oneshot":
-        if (!confirm("Diese Playlist künftig als Oneshot behandeln?")) return;
+        if (!confirm("Treat this playlist as a oneshot from now on?")) return;
         await api(`/playlists/${id}/type`, { method: "POST", body: { type: "oneshot" } }); break;
       case "to-sync":
-        if (!confirm("Diese Playlist künftig als Sync-Playlist behandeln?")) return;
+        if (!confirm("Treat this playlist as a sync playlist from now on?")) return;
         await api(`/playlists/${id}/type`, { method: "POST", body: { type: "sync" } }); break;
       case "cancel": await api(`/jobs/${job}/cancel`, { method: "POST" }); break;
       case "cancel-current":
