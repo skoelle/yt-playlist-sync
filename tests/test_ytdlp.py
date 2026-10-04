@@ -32,6 +32,20 @@ def test_parse_video_listing_marks_unavailable():
     assert [v.unavailable for v in ytdlp.parse_video_listing(data)] == [False, True, True]
 
 
+def test_parse_video_listing_positions_and_duration():
+    data = {"entries": [
+        {"id": "a", "title": "A", "duration": 61.5},
+        {"id": "b", "title": "B", "duration": None},
+        {"id": "c", "title": "C"},
+        {"id": "", "title": "skip me"},
+        {"id": "d", "title": "D", "playlist_index": 9},
+    ]}
+    out = ytdlp.parse_video_listing(data)
+    assert [(e.id, e.position, e.duration_s) for e in out] == [
+        ("a", 1, 61), ("b", 2, None), ("c", 3, None), ("d", 9, None),
+    ]
+
+
 def test_parse_line_events():
     assert ytdlp.parse_line("YTPS| 42.5%|1.2MiB/s|00:10") == {
         "type": "progress", "percent": 42.5, "speed": "1.2MiB/s", "eta": "00:10"}

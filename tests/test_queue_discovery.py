@@ -17,7 +17,7 @@ from app.config import Settings, ensure_dirs  # noqa: E402
 from app.db import init_engine, migrate, session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery, run_discovery  # noqa: E402
 from app.jobqueue import JobQueue  # noqa: E402
-from app.models import Job, Playlist, Run  # noqa: E402
+from app.models import Job, Playlist, PlaylistEntry, Run  # noqa: E402
 from app.scheduler import AppScheduler  # noqa: E402
 from app.ytdlp import PlaylistInfo  # noqa: E402
 
@@ -265,6 +265,93 @@ def test_oneshot_failure_and_retry(cfg, stub):
 
     asyncio.run(scenario())
     assert playlists()["PLbbb"][1] == "done"
+
+
+def entries_of(pl_pid: str):
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == pl_pid))
+        rows = s.scalars(
+            select(PlaylistEntry).where(PlaylistEntry.playlist_id == pk)
+            .order_by(PlaylistEntry.position, PlaylistEntry.video_id)
+        ).all()
+        return [(r.video_id, r.position, r.unavailable, r.reason, r.remote_present) for r in rows]
+
+
+async def start_and_wait(cfg, queue: JobQueue) -> list[int]:
+    """Boot the worker, run discovery and wait until every queued job finished."""
+    await queue.start()
+    await run_discovery(cfg, queue)
+    with session_scope() as s:
+        ids = list(s.scalars(select(Job.id)).all())
+    await queue.wait_for_jobs(ids, poll=0.2)
+    return ids
+
+
+def test_playlist_entries_snapshot_and_reasons(cfg, stub):
+    """Every run snapshots the remote listing; failed videos keep the last error message."""
+    stub.data_ref["fail"] = {"vid00000002": "temporary"}
+    stub.save()
+
+    async def scenario():
+        queue = JobQueue(cfg)
+        await start_and_wait(cfg, queue)
+        rows = entries_of("PLaaa")
+        assert [(v, pos, present) for v, pos, _, _, present in rows] == [
+            ("vid00000001", 1, True), ("vid00000002", 2, True), ("vid00000003", 3, True),
+        ]
+        assert rows[1][3] is not None and "503" in rows[1][3]
+        assert rows[0][3] is None and rows[2][3] is None
+
+        stub.data_ref["fail"] = {}
+        stub.save()
+        with session_scope() as s:
+            pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == "PLaaa"))
+        jid = queue.enqueue(pk, "retry")
+        assert jid is not None
+        await queue.wait_for_jobs([jid], poll=0.2)
+        assert entries_of("PLaaa")[1][3] is None  # downloaded now: the stale reason is cleared
+        await queue.stop()
+
+    asyncio.run(scenario())
+
+
+def test_playlist_entries_keep_rows_when_video_leaves_listing(cfg, stub):
+    """Rows are never deleted; a video gone from the playlist is only flagged remote_present=False."""
+
+    async def scenario():
+        queue = JobQueue(cfg)
+        await start_and_wait(cfg, queue)
+        assert len(entries_of("PLaaa")) == 3
+
+        stub.data_ref["playlists"]["PLaaa"] = stub.data_ref["playlists"]["PLaaa"][:2]
+        stub.save()
+        with session_scope() as s:
+            pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == "PLaaa"))
+        jid = queue.enqueue(pk, "manual")
+        assert jid is not None
+        await queue.wait_for_jobs([jid], poll=0.2)
+        rows = entries_of("PLaaa")
+        assert len(rows) == 3
+        assert [present for *_, present in rows] == [True, True, False]
+        await queue.stop()
+
+    asyncio.run(scenario())
+
+
+def test_playlist_entries_unavailable_marker(cfg, stub):
+    """A [Private video] marker in the listing flags the entry as unavailable."""
+    stub.data_ref["playlists"]["PLaaa"][1]["title"] = "[Private video]"
+    stub.save()
+
+    async def scenario():
+        queue = JobQueue(cfg)
+        await start_and_wait(cfg, queue)
+        rows = entries_of("PLaaa")
+        assert rows[1][0] == "vid00000002" and rows[1][2] is True
+        assert rows[0][2] is False
+        await queue.stop()
+
+    asyncio.run(scenario())
 
 
 def test_priority_order_without_worker(cfg):

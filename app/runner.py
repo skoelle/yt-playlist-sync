@@ -41,6 +41,7 @@ class RunResult:
     failed: int = 0
     error_summary: str | None = None
     errors: list[dict[str, Any]] = field(default_factory=list)
+    entries: list[ytdlp.VideoEntry] = field(default_factory=list)
 
 
 class ProcessHandle:
@@ -98,6 +99,7 @@ async def run_playlist(
             if ytdlp.is_forbidden(str(exc)):
                 result.forbidden = True
             return result
+        result.entries = entries
 
         before = ytdlp.read_archive(archive)
         cmd = ytdlp.build_download_command(
