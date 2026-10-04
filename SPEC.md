@@ -4,13 +4,13 @@ Version 1.1 (Stand Umsetzung) | Repo-Name: `yt-playlist-sync` | Öffentliches Re
 
 ## 1. Zweck
 
-Ein selbst gehosteter Dienst, der die **öffentlichen Playlists eines YouTube-Kanals** stündlich erkennt und per `yt-dlp` als Video auf einen NAS-Share herunterlädt. Playlists, deren Titel das Schlüsselwort `setlist` enthalten ("Oneshot"), werden nur einmal vollständig geladen. Alle anderen ("Sync") werden einmal pro Nacht inkrementell synchronisiert. Eine kleine Web UI zeigt Status, Sync-Playlists und Oneshot-Playlists.
+Ein selbst gehosteter Dienst, der die **öffentlichen Playlists eines YouTube-Kanals** alle 50–70 Minuten (im Schnitt stündlich) erkennt und per `yt-dlp` als Video auf einen NAS-Share herunterlädt. Playlists, deren Titel das Schlüsselwort `setlist` enthalten ("Oneshot"), werden nur einmal vollständig geladen. Alle anderen ("Sync") werden einmal pro Nacht inkrementell synchronisiert. Eine kleine Web UI zeigt Status, Sync-Playlists und Oneshot-Playlists.
 
 ## 2. Ziele und Nicht-Ziele
 
 ### Ziele
 - Kein Google-Login, keine OAuth-Secrets: nur öffentliche Playlists eines Kanals.
-- Stündliche Discovery, neue Playlists werden sofort heruntergeladen.
+- Discovery im Intervall von 50–70 Minuten (im Schnitt stündlich), neue Playlists werden sofort heruntergeladen.
 - Nächtlicher Sync der Sync-Playlists, nie Löschen von Dateien.
 - Genau ein Download-Job zur selben Zeit (keine Parallelität).
 - Web UI mit 3 Tabs, Updates per JavaScript (`fetch`), kein HTML-Reload.
@@ -70,7 +70,7 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 |---|---|---|
 | `YOUTUBE_CHANNEL` | (Pflicht) | Handle (`@beispielkanal`), Channel-ID (`UC...`) oder URL |
 | `ONESHOT_KEYWORD` | `setlist` | Komma-getrennte Schlüsselwörter im Titel, case-insensitive (z. B. `setlist,concert`) |
-| `DISCOVERY_CRON` | `0 * * * *` | Stündlich |
+| `DISCOVERY_INTERVAL_MIN` / `DISCOVERY_INTERVAL_MAX` | `50` / `70` | Discovery-Intervall in Minuten (jeder Lauf zufällig in diesem Bereich) |
 | `SYNC_CRON` | `0 3 * * *` | Nachtsync |
 | `YTDLP_UPDATE_CRON` | `30 2 * * *` | yt-dlp Update |
 | `TZ` | `Europe/Berlin` | Zeitzone |
@@ -90,8 +90,9 @@ Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht in
 
 ## 6. Funktionale Anforderungen
 
-### 6.1 Discovery (stündlich)
-1. **Übersprungener Lauf:** Solange die Queue nicht leer ist (Jobs `queued` oder `running` – laufender Download, noch nicht abgearbeitete Jobs oder die 429-Pause), wird der automatische Lauf übersprungen: kein `runs`-Eintrag, Log-Meldung, Ping `HC_DISCOVERY_URL` success mit der Message `skipped: queue busy` (damit Healthchecks nicht „late" meldet). Der nächste Versuch ist der nächste Cron-Slot; nach einem Neustart mit requeued Jobs ebenso. Der manuelle Button (`POST /api/discovery/run`) überspringt **nicht**.
+### 6.1 Discovery (alle 50–70 Minuten)
+- **Planung ohne Cron:** Beim Start plant der Scheduler die erste Laufzeit als `now + uniform(DISCOVERY_INTERVAL_MIN, DISCOVERY_INTERVAL_MAX)` Minuten; jeder Tick plant **vor** dem Lauf den nächsten (`_discovery_tick` → `_schedule_discovery`, date-Job `id="discovery"`), damit lange oder übersprungene Läufe die Kette nicht verschieben. Die Start-Discovery (+10 s nach Container-Start, `startup_job`) läuft sofort und zusätzlich; sie startet die Kette nicht. `GET /api/status` (`discovery.next`) zeigt den echten geplanten Zeitpunkt. `DISCOVERY_CRON` wird nicht mehr ausgewertet (kommt via `extra="ignore"` stillschweigend durch).
+1. **Übersprungener Lauf:** Solange die Queue nicht leer ist (Jobs `queued` oder `running` – laufender Download, noch nicht abgearbeitete Jobs oder die 429-Pause), wird der automatische Lauf übersprungen: kein `runs`-Eintrag, Log-Meldung, Ping `HC_DISCOVERY_URL` success mit der Message `skipped: queue busy` (damit Healthchecks nicht „late" meldet). Der nächste Versuch ist der nächste geplante Lauf; nach einem Neustart mit requeued Jobs ebenso. Der manuelle Button (`POST /api/discovery/run`) überspringt **nicht**.
 2. Ping `HC_DISCOVERY_URL/start`.
 3. Liste holen: `yt-dlp --flat-playlist -J "https://www.youtube.com/<handle>/playlists"`.
 4. Pro Playlist `playlist_id`, `title`, optional `item_count`.
@@ -269,3 +270,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Neu: Die stündliche Discovery wird übersprungen, solange die Queue nicht leer ist; der manuelle Button überspringt nicht (siehe 6.1).
 - Neu: HTTP 403 bricht Jobs sofort ab (Pause wie 429, Playlist `failed`) und stößt einen yt-dlp-Update-Check an (siehe 6.6/6.7).
 - Neu: Zufällige Pause von `JOB_GAP_MIN`..`JOB_GAP_MAX` Sekunden zwischen zwei Jobs, damit yt-dlp-Starts nicht metronomisch sind (siehe 6.6).
+- Neu: Discovery-Intervall statt Cron: `DISCOVERY_INTERVAL_MIN`/`MAX` (Default 50/70 Minuten, zufällig pro Lauf); `DISCOVERY_CRON` wird nicht mehr ausgewertet (siehe 6.1).

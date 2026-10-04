@@ -15,7 +15,7 @@
 
 ```
 FastAPI (app/main.py, Lifespan)
-├── Scheduler (app/scheduler.py, APScheduler): Discovery (Skip bei lauter Queue), Nachtsync, yt-dlp-Update, Log-Cleanup, Backups 0:30 (DB + Archive)
+├── Scheduler (app/scheduler.py, APScheduler): Discovery als Intervall 50–70 min (Skip bei lauter Queue), Nachtsync, yt-dlp-Update, Log-Cleanup, Backups 0:30 (DB + Archive)
 ├── Job-Queue (app/jobqueue.py): genau 1 Worker, DB-backed, Prioritäten, Recovery, Cancel, 429-Pause
 │     └── Runner (app/runner.py): 1 yt-dlp-Subprozess, ohne DB-Zugriff
 │           └── ytdlp.py: URLs, Kommandobau, Output-Parser, Evaluate (rein, testbar)
@@ -35,7 +35,7 @@ FastAPI (app/main.py, Lifespan)
 | `app/runner.py` | `RunParams`/`RunResult` (Feld `forbidden` für 403-Abbruch), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung |
 | `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States, Pause bei 429/403, `on_forbidden`-Callback, Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen), `run_discovery` mit Leerlistenschutz |
-| `app/scheduler.py` | Cron-Jobs, Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update) |
+| `app/scheduler.py` | Cron-Jobs (Sync/Update/Cleanup/Backup) + Discovery als Intervall (`_schedule_discovery`/`_discovery_tick`, `DISCOVERY_INTERVAL_MIN/MAX`), Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update) |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
 | `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
@@ -72,7 +72,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **68 Tests grün** (`pytest -q`, ~14 s).
+- Bestehender Stand: **69 Tests grün** (`pytest -q`, ~14 s).
 
 ## Harte Regeln
 
@@ -113,7 +113,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (68), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (69), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

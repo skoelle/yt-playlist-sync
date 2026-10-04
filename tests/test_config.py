@@ -13,12 +13,13 @@ from app.config import Settings  # noqa: E402
 
 
 def test_defaults(monkeypatch):
-    for k in ("ONESHOT_KEYWORD", "DISCOVERY_CRON", "SYNC_CRON", "DRY_RUN", "DATABASE_URL",
-              "BACKUP_DIR", "BACKUP_KEEP"):
+    for k in ("ONESHOT_KEYWORD", "DISCOVERY_INTERVAL_MIN", "DISCOVERY_INTERVAL_MAX", "SYNC_CRON",
+              "DRY_RUN", "DATABASE_URL", "BACKUP_DIR", "BACKUP_KEEP"):
         monkeypatch.delenv(k, raising=False)
     s = Settings(youtube_channel="@beispielkanal")
     assert s.oneshot_keyword == "setlist"
-    assert s.discovery_cron == "0 * * * *" and s.sync_cron == "0 3 * * *"
+    assert s.sync_cron == "0 3 * * *" and s.ytdlp_update_cron == "30 2 * * *"
+    assert s.discovery_interval_min == 50 and s.discovery_interval_max == 70
     assert s.dry_run is False
     assert s.backup_keep == 7 and s.backup_dir == Path("/backup")
     assert s.job_gap_min == 1 and s.job_gap_max == 10
@@ -48,3 +49,7 @@ def test_invalid_cron_and_sleep():
         Settings(youtube_channel="@x", job_gap_min=5, job_gap_max=1)
     with pytest.raises(ValidationError):
         Settings(youtube_channel="@x", job_gap_min=-1)
+    with pytest.raises(ValidationError):
+        Settings(youtube_channel="@x", discovery_interval_min=70, discovery_interval_max=50)
+    with pytest.raises(ValidationError):
+        Settings(youtube_channel="@x", discovery_interval_min=0)

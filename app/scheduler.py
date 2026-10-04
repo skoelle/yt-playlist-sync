@@ -1,10 +1,11 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
-"""Cron driven tasks: discovery, nightly sync, yt-dlp updates."""
+"""Scheduled tasks: discovery (random interval), nightly sync, yt-dlp updates, backups."""
 from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -34,10 +35,7 @@ class AppScheduler:
 
     async def start(self) -> None:
         s = self.settings
-        self.scheduler.add_job(
-            self.discovery_job, CronTrigger.from_crontab(s.discovery_cron, timezone=s.tzinfo),
-            id="discovery", max_instances=1, coalesce=True,
-        )
+        self._schedule_discovery()
         self.scheduler.add_job(
             self.sync_job, CronTrigger.from_crontab(s.sync_cron, timezone=s.tzinfo),
             id="sync", max_instances=1, coalesce=True,
@@ -73,6 +71,20 @@ class AppScheduler:
 
     async def startup_job(self) -> None:
         await self.update_ytdlp(wait_for_idle=False)
+        await self.discovery_job()
+
+    def _schedule_discovery(self) -> None:
+        """Plan the next discovery run at a random point in [MIN, MAX] minutes (SPEC 6.1)."""
+        delay = random.uniform(self.settings.discovery_interval_min, self.settings.discovery_interval_max)
+        when = datetime.now(timezone.utc) + timedelta(minutes=delay)
+        self.scheduler.add_job(
+            self._discovery_tick, "date", run_date=when, id="discovery",
+            max_instances=1, replace_existing=True,
+        )
+        log.debug("next discovery in %.0f minutes", delay)
+
+    async def _discovery_tick(self) -> None:
+        self._schedule_discovery()  # first, so long or skipped runs do not shift the cadence
         await self.discovery_job()
 
     async def discovery_job(self, force: bool = False) -> None:
