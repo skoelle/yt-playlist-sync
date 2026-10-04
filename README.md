@@ -10,7 +10,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 - 🖥️ Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*, plus a playlist detail page: cover image, a video gallery with thumbnails, duration badges and metadata from the local `.info.json` files (like a YouTube playlist), including resolution, file size, codecs and bitrates per video. Clicking a video opens a built-in player that streams the downloaded file (seeking via HTTP range) and continues with the next video; click the background or press ESC to close. Also on the page: all database fields, job history, and the raw file list. Titles link to the detail page, a small ↗ opens the YouTube playlist. Data is reloaded with JavaScript, the page itself is never reloaded.
 - 🔒 No Google login and no API keys: only public playlists are used.
 - 🩺 Optional [Healthchecks](https://healthchecks.io) pings for the discovery run and the nightly sync.
-- 📦 yt-dlp updates itself on start and daily. The image is rebuilt weekly by GitHub Actions.
+- 📦 yt-dlp updates itself on start and daily, including the JS challenge solver; the extraction cache is cleared after an update. The image is rebuilt weekly by GitHub Actions.
 - 🗄️ Nightly backup (00:30) of the database *and* the yt-dlp download archives, with rotation.
 
 > ⚠️ **Disclaimer:** Only download content you own or that you are allowed to download. Respect the YouTube Terms of Service and copyright law. You are responsible for how you use this tool.

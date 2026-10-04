@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -83,6 +84,23 @@ def ytdlp_env(config_dir: Path | str) -> dict[str, str]:
         old = env.get("PYTHONPATH")
         env["PYTHONPATH"] = f"{lib}{os.pathsep}{old}" if old else str(lib)
     return env
+
+
+def build_update_command(lib: Path | str) -> list[str]:
+    """pip command refreshing yt-dlp into lib.
+
+    The default extra matters: yt-dlp-ejs (the JavaScript challenge solver) is
+    only pulled in by yt-dlp[default] and pinned exactly, so pip installs the
+    matching ejs into lib whenever the environment copy no longer matches.
+    """
+    return [
+        sys.executable, "-m", "pip", "install", "--upgrade", "--no-warn-script-location",
+        "--target", str(lib), "yt-dlp[default]",
+    ]
+
+
+def build_cache_clear_command(ytdlp_bin: str) -> list[str]:
+    return [ytdlp_bin, "--rm-cache-dir"]
 
 
 def parse_playlist_listing(data: dict[str, Any]) -> list[PlaylistInfo]:

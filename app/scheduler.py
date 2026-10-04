@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -126,10 +125,12 @@ class AppScheduler:
                 log.warning("queue stayed busy, skipping yt-dlp update")
                 return
         lib = s.config_dir / "ytdlp-lib"
+        # pip --target reinstalls (and reports "Successfully installed") on every
+        # run, so the effective version decides whether the cache went stale.
+        before = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "pip", "install", "--upgrade", "--no-warn-script-location",
-                "--target", str(lib), "yt-dlp",
+                *ytdlp.build_update_command(lib),
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             )
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
@@ -139,6 +140,24 @@ class AppScheduler:
             log.warning("yt-dlp update failed: %s", exc)
         self.ytdlp_version = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
         log.info("yt-dlp version: %s", self.ytdlp_version)
+        if self.ytdlp_version != before:
+            await self.clear_ytdlp_cache()
+
+    async def clear_ytdlp_cache(self) -> None:
+        """Drop cached signatures/challenge values after an update (SPEC 6.7)."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *ytdlp.build_cache_clear_command(self.settings.ytdlp_bin),
+                env=ytdlp.ytdlp_env(self.settings.config_dir),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+            if proc.returncode != 0:
+                log.warning("yt-dlp cache clear failed: %s", out.decode(errors="replace")[-200:])
+            else:
+                log.info("yt-dlp cache cleared")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("yt-dlp cache clear failed: %s", exc)
 
     async def cleanup_logs(self) -> None:
         cutoff = datetime.now().timestamp() - self.settings.log_retention_days * 86400
