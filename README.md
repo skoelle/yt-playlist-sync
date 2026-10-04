@@ -49,7 +49,7 @@ Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video 
 |---|---|---|
 | `YOUTUBE_CHANNEL` | required | Handle (`@name`), channel ID (`UC...`) or channel URL |
 | `ONESHOT_KEYWORD` | `setlist` | Comma-separated keywords in the title that make a playlist a oneshot |
-| `DISCOVERY_CRON` | `0 * * * *` | Discovery schedule |
+| `DISCOVERY_INTERVAL_MIN` / `DISCOVERY_INTERVAL_MAX` | `50` / `70` | Random minutes between discovery runs |
 | `SYNC_CRON` | `0 3 * * *` | Nightly sync of sync playlists |
 | `YTDLP_UPDATE_CRON` | `30 2 * * *` | Daily yt-dlp update |
 | `TZ` | `Europe/Berlin` | Time zone for schedules and UI |
@@ -97,7 +97,7 @@ only overwritten, nothing is deleted), start the container.
 - ⏸️ If YouTube answers with HTTP 429 or a bot check, the current job stops and the queue pauses for 30 minutes.
 - 🚫 The same happens on HTTP 403 while downloading (`unable to download video data`): the job stops immediately instead of grinding through the playlist, the playlist shows *failed*, and a yt-dlp update check is triggered during the pause.
 - 🔀 Playlists are never started back-to-back: the queue waits a random 1–10 seconds between two jobs (`JOB_GAP_MIN`/`JOB_GAP_MAX`), so yt-dlp process starts are not metronomic. The first job after an idle queue starts immediately.
-- ⏭️ The hourly discovery is skipped while any download is queued or running (including a rate-limit pause) — it retries in the next hourly slot. The manual *Run discovery* button always runs.
+- ⏭️ Discovery runs every 50–70 minutes on average (`DISCOVERY_INTERVAL_MIN`/`MAX`, each run picks a new random delay) and is skipped while any download is queued or running (including a rate-limit pause) — it retries at the next planned run. The manual *Run discovery* button always runs.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
 
 ## 🛠️ Development

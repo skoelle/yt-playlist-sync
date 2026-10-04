@@ -9,6 +9,8 @@ pytest.importorskip("alembic")
 pytest.importorskip("pydantic_settings")
 pytest.importorskip("apscheduler")
 
+from datetime import datetime, timezone  # noqa: E402
+
 from sqlalchemy import select  # noqa: E402
 
 from app.config import Settings, ensure_dirs  # noqa: E402
@@ -90,6 +92,35 @@ def test_discovery_runs_when_idle(cfg, stub, monkeypatch):
     assert [k for k, _ in pings] == ["start", "success"]
     runs = discovery_runs()
     assert len(runs) == 1 and runs[0][0] == "success"
+
+
+def test_discovery_scheduled_with_random_interval(cfg, monkeypatch):
+    """Discovery läuft als Intervall 50–70 min statt als Cron, jeder Tick plant den nächsten (SPEC 6.1)."""
+    ran: list[bool] = []
+
+    async def fake_discovery(force: bool = False):
+        ran.append(force)
+
+    queue = JobQueue(cfg)
+    sched = AppScheduler(cfg, queue)
+    monkeypatch.setattr(sched, "discovery_job", fake_discovery)
+
+    async def scenario():
+        await sched.start()
+        try:
+            first = sched.scheduler.get_job("discovery").next_run_time
+            await sched._discovery_tick()
+            second = sched.scheduler.get_job("discovery").next_run_time
+            return first, second
+        finally:
+            await sched.stop()
+
+    first, second = asyncio.run(scenario())
+    now = datetime.now(timezone.utc)
+    for nxt in (first, second):
+        delta = (nxt - now).total_seconds() / 60
+        assert 49.5 <= delta <= 70.5
+    assert ran == [False]
 
 
 def test_job_gap_between_playlists(cfg, stub):

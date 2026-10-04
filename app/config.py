@@ -18,7 +18,8 @@ class Settings(BaseSettings):
 
     youtube_channel: str
     oneshot_keyword: str = "setlist"
-    discovery_cron: str = "0 * * * *"
+    discovery_interval_min: int = 50
+    discovery_interval_max: int = 70
     sync_cron: str = "0 3 * * *"
     ytdlp_update_cron: str = "30 2 * * *"
     tz: str = "Europe/Berlin"
@@ -41,7 +42,7 @@ class Settings(BaseSettings):
     backup_keep: int = 7
     dry_run: bool = False
 
-    @field_validator("discovery_cron", "sync_cron", "ytdlp_update_cron")
+    @field_validator("sync_cron", "ytdlp_update_cron")
     @classmethod
     def _check_cron(cls, value: str) -> str:
         CronTrigger.from_crontab(value)
@@ -66,6 +67,8 @@ class Settings(BaseSettings):
             raise ValueError("SLEEP_MIN must be <= SLEEP_MAX")
         if self.job_gap_min < 0 or self.job_gap_min > self.job_gap_max:
             raise ValueError("JOB_GAP_MIN must be >= 0 and <= JOB_GAP_MAX")
+        if self.discovery_interval_min < 1 or self.discovery_interval_min > self.discovery_interval_max:
+            raise ValueError("DISCOVERY_INTERVAL_MIN must be >= 1 and <= DISCOVERY_INTERVAL_MAX")
         if self.backup_keep < 0:
             raise ValueError("BACKUP_KEEP must be >= 0")
         return self
