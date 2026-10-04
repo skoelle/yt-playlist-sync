@@ -118,8 +118,6 @@ async def playlists(type: str | None = Query(None, pattern="^(sync|oneshot)$")) 
         for pl in s.scalars(stmt.order_by(Playlist.title)).all():
             last = s.scalar(select(Job).where(Job.playlist_id == pl.id).order_by(Job.id.desc()).limit(1))
             out.append(playlist_dict(pl, last))
-    if type == "oneshot":
-        out.sort(key=lambda p: p["completed_at"] or p["first_downloaded_at"] or "", reverse=True)
     return out
 
 

@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,17 @@ def test_playlist_endpoints(client):
     assert client.get("/api/jobs/9999/log").status_code == 404
 
 
+def test_oneshot_playlists_default_to_title_order(client):
+    # completed_at is deliberately inverse to the title order
+    apply_discovery([PlaylistInfo("PL1", "Zulu Setlist"), PlaylistInfo("PL2", "Alpha Setlist")], "setlist")
+    now = utcnow()
+    with session_scope() as s:
+        for pl in s.scalars(select(Playlist)).all():
+            pl.completed_at = now if pl.playlist_id == "PL1" else now - timedelta(days=7)
+    one = client.get("/api/playlists?type=oneshot").json()
+    assert [p["title"] for p in one] == ["Alpha Setlist", "Zulu Setlist"]
+
+
 def test_ui_has_no_page_reload():
     js = (Path(__file__).parent.parent / "app" / "static" / "app.js").read_text()
     assert "location.reload" not in js
@@ -72,6 +84,7 @@ def test_ui_sync_tab_has_summary_and_sort():
     assert 'id="sync-summary"' in html
     assert 'data-sort="title"' in sync_head and 'data-sort="last"' in sync_head
     assert "function renderSyncs" in js and "syncSortValue" in js
+    assert 'sort: { key: "title", dir: "asc" }' in js  # oneshot default = title, like sync
 
 
 def test_ui_is_english():
