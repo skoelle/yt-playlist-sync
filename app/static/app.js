@@ -10,7 +10,9 @@ const state = {
   busy: false,
   log: { jobId: null, offset: 0, open: false, finished: false },
   sort: { key: "date", dir: "desc" },
+  syncSort: { key: "title", dir: "asc" },
   oneshots: [],
+  syncs: [],
   detail: null,
   detailId: null,
   detailFrom: "status",
@@ -204,6 +206,30 @@ function renderOneshots() {
   const songs = state.oneshots.reduce((a, p) => a + p.downloaded_count, 0);
   const size = state.oneshots.reduce((a, p) => a + p.size_bytes, 0);
   setText("oneshot-summary", `${state.oneshots.length} Setlists | ${songs} Songs | ${fmtBytes(size)}`);
+}
+
+function syncSortValue(p, key) {
+  switch (key) {
+    case "title": return p.title.toLowerCase();
+    case "videos": return p.downloaded_count;
+    case "size": return p.size_bytes;
+    case "last": return p.last_sync_at || "";
+    case "state": return p.state;
+    default: return "";
+  }
+}
+
+function renderSyncs() {
+  const { key, dir } = state.syncSort;
+  const list = [...state.syncs].sort((a, b) => {
+    const va = syncSortValue(a, key), vb = syncSortValue(b, key);
+    const c = va < vb ? -1 : va > vb ? 1 : 0;
+    return dir === "asc" ? c : -c;
+  });
+  syncRows($("#sync-table tbody"), list, (p) => p.id, syncRow);
+  const videos = state.syncs.reduce((a, p) => a + p.downloaded_count, 0);
+  const size = state.syncs.reduce((a, p) => a + p.size_bytes, 0);
+  setText("sync-summary", `${state.syncs.length} Sync-Playlists | ${videos} Videos | ${fmtBytes(size)}`);
 }
 
 function videoRow(v) {
@@ -415,8 +441,8 @@ async function tick() {
       const jobs = await api("/jobs?limit=15");
       syncRows($("#jobs-table tbody"), jobs, (j) => j.id, jobRow);
     } else if (state.tab === "sync") {
-      const list = await api("/playlists?type=sync");
-      syncRows($("#sync-table tbody"), list, (p) => p.id, syncRow);
+      state.syncs = await api("/playlists?type=sync");
+      renderSyncs();
     } else if (state.tab === "oneshot") {
       state.oneshots = await api("/playlists?type=oneshot");
       renderOneshots();
@@ -504,8 +530,12 @@ document.addEventListener("click", (ev) => {
   const th = ev.target.closest("th[data-sort]");
   if (th) {
     const key = th.dataset.sort;
-    state.sort = { key, dir: state.sort.key === key && state.sort.dir === "desc" ? "asc" : "desc" };
-    renderOneshots();
+    const table = th.closest("table").id;
+    const st = table === "sync-table" ? state.syncSort : state.sort;
+    st.dir = st.key === key && st.dir === "desc" ? "asc" : "desc";
+    st.key = key;
+    if (table === "sync-table") renderSyncs();
+    else renderOneshots();
   }
 });
 window.addEventListener("hashchange", showTab);

@@ -89,10 +89,11 @@
   </section>
 
   <section id="tab-sync" data-tab="sync" hidden>
-    <p class="muted">Playlists ohne Schlüsselwort. Sie werden einmal pro Nacht synchronisiert.</p>
+    <p class="muted" id="sync-summary"></p>
     <div class="table-wrap">
     <table id="sync-table">
-      <thead><tr><th>Titel</th><th>Videos</th><th>Größe</th><th>Letzter Sync</th><th>Nächster Sync</th><th>Status</th><th>Aktionen</th></tr></thead>
+      <thead><tr><th data-sort="title">Titel</th><th data-sort="videos">Videos</th><th data-sort="size">Größe</th>
+        <th data-sort="last">Letzter Sync</th><th>Nächster Sync</th><th data-sort="state">Status</th><th>Aktionen</th></tr></thead>
       <tbody></tbody>
     </table>
     </div>

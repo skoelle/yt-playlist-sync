@@ -63,6 +63,16 @@ def test_ui_has_no_page_reload():
     assert "location.reload" not in js
 
 
+def test_ui_sync_tab_has_summary_and_sort():
+    root = Path(__file__).parent.parent / "app" / "static"
+    html = (root / "index.html").read_text()
+    js = (root / "app.js").read_text()
+    sync_head = html.split('id="sync-table"')[1].split("</table>")[0]
+    assert 'id="sync-summary"' in html
+    assert 'data-sort="title"' in sync_head and 'data-sort="last"' in sync_head
+    assert "function renderSyncs" in js and "syncSortValue" in js
+
+
 def test_playlist_detail_and_files(client):
     apply_discovery([PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist A")], "setlist")
     pid = client.get("/api/playlists?type=sync").json()[0]["id"]
