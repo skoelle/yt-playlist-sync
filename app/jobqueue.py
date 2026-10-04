@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -31,6 +32,7 @@ class JobQueue:
         self.live: dict[str, Any] = {}
         self.paused_until = None
         self.current_job_id: int | None = None
+        self.on_forbidden: Callable[[], None] | None = None
         self._wakeup = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._task: asyncio.Task | None = None
@@ -253,9 +255,13 @@ class JobQueue:
         self._handle = None
         self.current_job_id = None
         self.live = {}
-        if result.rate_limited:
+        if result.rate_limited or result.forbidden:
             self.paused_until = utcnow() + RATE_LIMIT_PAUSE
-            log.warning("rate limited, queue paused until %s UTC", self.paused_until)
+            log.warning("%s, queue paused until %s UTC",
+                        "forbidden (HTTP 403)" if result.forbidden else "rate limited",
+                        self.paused_until)
+        if result.forbidden and self.on_forbidden is not None:
+            self.on_forbidden()
 
     def _persist_live(self, job_id: int) -> None:
         try:

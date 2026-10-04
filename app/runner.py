@@ -32,6 +32,7 @@ class RunResult:
     success: bool = False
     cancelled: bool = False
     rate_limited: bool = False
+    forbidden: bool = False
     exit_code: int | None = None
     total: int = 0
     archived: int = 0
@@ -94,6 +95,8 @@ async def run_playlist(
         except Exception as exc:  # noqa: BLE001
             write(f"Could not list playlist: {exc}")
             result.error_summary = f"Could not list playlist: {str(exc)[:300]}"
+            if ytdlp.is_forbidden(str(exc)):
+                result.forbidden = True
             return result
 
         before = ytdlp.read_archive(archive)
@@ -124,6 +127,10 @@ async def run_playlist(
                     result.rate_limited = True
                     write("Rate limit or bot check detected, stopping this job.")
                     handle.terminate()
+                elif event.get("forbidden") and not result.forbidden:
+                    result.forbidden = True
+                    write("HTTP 403 Forbidden detected, stopping this job.")
+                    handle.terminate()
             on_event(event)
         result.exit_code = await proc.wait()
 
@@ -141,6 +148,9 @@ async def run_playlist(
         return result
     if result.rate_limited:
         result.error_summary = "Rate limited by YouTube, queue paused for a while"
+        return result
+    if result.forbidden:
+        result.error_summary = "HTTP 403 from YouTube, queue paused, yt-dlp update triggered"
         return result
     result.success = not ev.missing
     if ev.missing:

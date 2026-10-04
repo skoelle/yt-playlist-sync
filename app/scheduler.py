@@ -21,6 +21,7 @@ from .jobqueue import JobQueue
 from .models import Playlist
 
 log = logging.getLogger(__name__)
+_background: set[asyncio.Task] = set()
 
 
 class AppScheduler:
@@ -29,6 +30,7 @@ class AppScheduler:
         self.queue = queue
         self.ytdlp_version = "unknown"
         self.scheduler = AsyncIOScheduler(timezone=settings.tzinfo)
+        self._update_lock = asyncio.Lock()
 
     async def start(self) -> None:
         s = self.settings
@@ -114,6 +116,20 @@ class AppScheduler:
     async def update_job(self) -> None:
         await self.update_ytdlp(wait_for_idle=True)
 
+    def schedule_update_after_403(self) -> None:
+        """Fire-and-forget update check after a job aborted with HTTP 403 (SPEC 6.7)."""
+        task = asyncio.create_task(self._update_after_403())
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+
+    async def _update_after_403(self) -> None:
+        for _ in range(60):  # wait for the aborted job to be finalized, at most ~10 min
+            if self.queue.current_job_id is None:
+                break
+            await asyncio.sleep(10)
+        log.info("checking for yt-dlp update after HTTP 403")
+        await self.update_ytdlp(wait_for_idle=False)
+
     async def update_ytdlp(self, wait_for_idle: bool) -> None:
         s = self.settings
         if wait_for_idle:
@@ -124,24 +140,25 @@ class AppScheduler:
             else:
                 log.warning("queue stayed busy, skipping yt-dlp update")
                 return
-        lib = s.config_dir / "ytdlp-lib"
-        # pip --target reinstalls (and reports "Successfully installed") on every
-        # run, so the effective version decides whether the cache went stale.
-        before = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *ytdlp.build_update_command(lib),
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
-            if proc.returncode != 0:
-                log.warning("yt-dlp update failed: %s", out.decode(errors="replace")[-300:])
-        except Exception as exc:  # noqa: BLE001
-            log.warning("yt-dlp update failed: %s", exc)
-        self.ytdlp_version = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
-        log.info("yt-dlp version: %s", self.ytdlp_version)
-        if self.ytdlp_version != before:
-            await self.clear_ytdlp_cache()
+        async with self._update_lock:
+            lib = s.config_dir / "ytdlp-lib"
+            # pip --target reinstalls (and reports "Successfully installed") on every
+            # run, so the effective version decides whether the cache went stale.
+            before = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *ytdlp.build_update_command(lib),
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                )
+                out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+                if proc.returncode != 0:
+                    log.warning("yt-dlp update failed: %s", out.decode(errors="replace")[-300:])
+            except Exception as exc:  # noqa: BLE001
+                log.warning("yt-dlp update failed: %s", exc)
+            self.ytdlp_version = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
+            log.info("yt-dlp version: %s", self.ytdlp_version)
+            if self.ytdlp_version != before:
+                await self.clear_ytdlp_cache()
 
     async def clear_ytdlp_cache(self) -> None:
         """Drop cached signatures/challenge values after an update (SPEC 6.7)."""

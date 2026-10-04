@@ -55,6 +55,12 @@ def test_parse_line_error_classes():
     assert e["ratelimit"]
     e = ytdlp.parse_line("ERROR: [youtube] abcdefghijk: Unable to download webpage: HTTP Error 503")
     assert not e["permanent"] and not e["ratelimit"]
+    e = ytdlp.parse_line("ERROR: unable to download video data: HTTP Error 403: Forbidden")
+    assert e["forbidden"] and not e["ratelimit"] and not e["permanent"] and e["id"] is None
+    e = ytdlp.parse_line("ERROR: [youtube] abcdefghijk: HTTP Error 429: Too Many Requests")
+    assert not e["forbidden"]
+    assert ytdlp.is_forbidden("Could not list playlist: HTTP Error 403: Forbidden")
+    assert not ytdlp.is_forbidden("HTTP Error 503: Service Unavailable")
     e = ytdlp.parse_line("ERROR: Postprocessing: ffmpeg exited")
     assert e["id"] is None
 

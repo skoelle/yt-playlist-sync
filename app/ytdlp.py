@@ -25,6 +25,7 @@ _DEST = re.compile(r"^\[download\] Destination: (.+)$")
 _VIDEO = re.compile(r"^\[youtube\] ([\w-]{11}): Downloading")
 _ERROR = re.compile(r"^ERROR:\s*(?:\[youtube[^\]]*\]\s*([\w-]{11}):\s*)?(.*)$")
 _RATELIMIT = re.compile(r"HTTP Error 429|Too Many Requests|not a bot|rate.?limit", re.I)
+_FORBIDDEN = re.compile(r"HTTP Error 403", re.I)
 _PERMANENT = re.compile(
     r"Video unavailable|Private video|video is private|has been removed|no longer available|"
     r"account .* terminated|members-only|Join this channel|confirm your age|age-restricted|"
@@ -229,14 +230,20 @@ def parse_line(line: str) -> dict[str, Any] | None:
     if m := _ERROR.match(line):
         msg = m.group(2).strip()
         ratelimit = bool(_RATELIMIT.search(msg))
+        forbidden = bool(_FORBIDDEN.search(msg))
         return {
             "type": "error",
             "id": m.group(1),
             "message": msg,
             "ratelimit": ratelimit,
-            "permanent": (not ratelimit) and bool(_PERMANENT.search(msg)),
+            "forbidden": forbidden,
+            "permanent": (not ratelimit) and not forbidden and bool(_PERMANENT.search(msg)),
         }
     return None
+
+
+def is_forbidden(text: str) -> bool:
+    return bool(_FORBIDDEN.search(text))
 
 
 def read_archive(path: Path | str) -> set[str]:

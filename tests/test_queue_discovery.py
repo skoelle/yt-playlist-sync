@@ -92,6 +92,46 @@ def test_discovery_runs_when_idle(cfg, stub, monkeypatch):
     assert len(runs) == 1 and runs[0][0] == "success"
 
 
+def test_forbidden_job_fails_playlist_pauses_and_triggers_update(cfg, stub):
+    """HTTP 403: Job abbrechen, Playlist failed, Queue pausieren, Update anstoßen (SPEC 6.6/6.7)."""
+    stub.data_ref["fail"] = {"vid00000001": "forbidden"}
+    stub.save()
+    apply_discovery([PlaylistInfo("PLaaa", "Sommer Mix")], "setlist")
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id))
+    fired: list[bool] = []
+    queue = JobQueue(cfg)
+    queue.on_forbidden = lambda: fired.append(True)
+    jid = queue.enqueue(pk, "manual")
+
+    async def scenario():
+        await queue.start()
+        await queue.wait_for_jobs([jid], poll=0.2)
+        await queue.stop()
+
+    asyncio.run(scenario())
+    with session_scope() as s:
+        job = s.get(Job, jid)
+        pl = s.get(Playlist, pk)
+        assert job.status == "failed" and "403" in (job.error_summary or "")
+        assert pl.state == "failed"
+    assert queue.paused_until is not None
+    assert fired == [True]
+
+
+def test_update_after_403_runs_update(cfg, monkeypatch):
+    calls: list[bool] = []
+
+    async def fake_update(wait_for_idle: bool):
+        calls.append(wait_for_idle)
+
+    queue = JobQueue(cfg)
+    sched = AppScheduler(cfg, queue)
+    monkeypatch.setattr(sched, "update_ytdlp", fake_update)
+    asyncio.run(sched._update_after_403())
+    assert calls == [False]
+
+
 def test_apply_discovery_types_rename_and_removal(cfg):
     stats = apply_discovery(
         [PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist 2024")], "setlist"
