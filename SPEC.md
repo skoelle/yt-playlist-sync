@@ -148,7 +148,8 @@ yt-dlp \
 - HTTP 429 oder Bot-Check: Job bricht ab (`failed`), Queue pausiert 30 Minuten.
 
 ### 6.7 yt-dlp Updates
-- Beim Start (nach 10 s) und täglich: `pip install --upgrade --target /config/ytdlp-lib yt-dlp`. Der yt-dlp Prozess bekommt `PYTHONPATH=/config/ytdlp-lib`. Bei Fehlern bleibt die Image-Version.
+- Beim Start (nach 10 s) und täglich: `pip install --upgrade --target /config/ytdlp-lib "yt-dlp[default]"`. Das `default`-Extra ist nötig, weil `yt-dlp-ejs` (der JavaScript-Challenge-Solver) nur dort hängt und exakt gepinnt ist (`==`): passt die Version in der Env nicht mehr, installiert pip den passenden ejs mit ins Target. Der yt-dlp Prozess bekommt `PYTHONPATH=/config/ytdlp-lib`. Bei Fehlern bleibt die Image-Version.
+- Wenn sich durch das Update die wirksame yt-dlp-Version geändert hat, läuft danach `yt-dlp --rm-cache-dir`. (Auf pip-Output wird nicht geprüft: `pip --target` installiert und meldet `Successfully installed` bei jedem Lauf.) Der Cache unter `/config/.cache/yt-dlp` (HOME des Container-Users ist `/config`) enthält gecachte Signaturen und Client-IDs, die nach einem Update veraltet sind und die Extraktion brechen können. Ohne Versionsänderung bleibt der Cache unangetastet.
 - Das tägliche Update wartet bis zu 3 Stunden auf eine leere Queue.
 - Die Action baut das Image wöchentlich ohne Cache neu. Die UI zeigt die yt-dlp Version.
 

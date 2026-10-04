@@ -93,6 +93,18 @@ def test_build_command():
     assert "--simulate" not in cmd2
 
 
+def test_build_update_command():
+    cmd = ytdlp.build_update_command("/config/ytdlp-lib")
+    # the default extra is required: yt-dlp-ejs hangs on it and must be updated too
+    assert cmd[-1] == "yt-dlp[default]" and "yt-dlp" not in cmd[:-1]
+    assert "--upgrade" in cmd and "--target" in cmd
+    assert cmd[cmd.index("--target") + 1] == "/config/ytdlp-lib"
+
+
+def test_build_cache_clear_command():
+    assert ytdlp.build_cache_clear_command("yt-dlp") == ["yt-dlp", "--rm-cache-dir"]
+
+
 def test_read_video_entries(tmp_path):
     import json as _json
 
