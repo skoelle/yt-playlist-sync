@@ -15,8 +15,8 @@
   <h1>yt-playlist-sync</h1>
   <nav>
     <a href="#status" data-tab="status">Status</a>
-    <a href="#sync" data-tab="sync">Sync-Playlists</a>
-    <a href="#oneshot" data-tab="oneshot">Oneshot-Playlists</a>
+    <a href="#sync" data-tab="sync">Sync<span class="nav-suffix">-Playlists</span></a>
+    <a href="#oneshot" data-tab="oneshot">Oneshot<span class="nav-suffix">-Playlists</span></a>
   </nav>
 </header>
 <div id="banners"></div>
@@ -59,10 +59,14 @@
       <div class="card">
         <h2>Schedules</h2>
         <table class="kv">
-          <tr><th>Discovery last</th><td id="sch-d-last"></td></tr>
-          <tr><th>Discovery next</th><td id="sch-d-next"></td></tr>
-          <tr><th>Nightly sync last</th><td id="sch-s-last"></td></tr>
-          <tr><th>Nightly sync next</th><td id="sch-s-next"></td></tr>
+          <tr class="kv-group"><th colspan="2">Discovery</th></tr>
+          <tr><th>next</th><td id="sch-d-next"></td></tr>
+          <tr><th>last</th><td id="sch-d-last"></td></tr>
+          <tr class="kv-msg"><td colspan="2" id="sch-d-msg"></td></tr>
+          <tr class="kv-group"><th colspan="2">Nightly sync</th></tr>
+          <tr><th>next</th><td id="sch-s-next"></td></tr>
+          <tr><th>last</th><td id="sch-s-last"></td></tr>
+          <tr class="kv-msg"><td colspan="2" id="sch-s-msg"></td></tr>
         </table>
         <div class="actions">
           <button data-action="discovery-now">Run discovery now</button>
@@ -81,7 +85,7 @@
     </div>
     <h2>Recent jobs</h2>
     <div class="table-wrap">
-    <table id="jobs-table">
+    <table id="jobs-table" class="ct">
       <thead><tr><th>#</th><th>Playlist</th><th>Trigger</th><th>Status</th><th>Duration</th><th>New</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
@@ -91,7 +95,7 @@
   <section id="tab-sync" data-tab="sync" hidden>
     <p class="muted" id="sync-summary"></p>
     <div class="table-wrap">
-    <table id="sync-table">
+    <table id="sync-table" class="ct">
       <thead><tr><th data-sort="title">Title</th><th data-sort="videos">Videos</th><th data-sort="size">Size</th>
         <th data-sort="last">Last sync</th><th>Next sync</th><th data-sort="state">Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
@@ -102,7 +106,7 @@
   <section id="tab-oneshot" data-tab="oneshot" hidden>
     <p class="muted" id="oneshot-summary"></p>
     <div class="table-wrap">
-    <table id="oneshot-table">
+    <table id="oneshot-table" class="ct">
       <thead><tr>
         <th data-sort="title">Title</th><th data-sort="date">Downloaded on</th>
         <th data-sort="songs">Songs</th><th data-sort="size">Size</th>
@@ -156,7 +160,7 @@
     </div>
     <h2>Job history</h2>
     <div class="table-wrap">
-      <table id="detail-jobs-table">
+      <table id="detail-jobs-table" class="ct">
         <thead><tr><th>#</th><th>Trigger</th><th>Status</th><th>Duration</th><th>New</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
