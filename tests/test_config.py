@@ -21,6 +21,7 @@ def test_defaults(monkeypatch):
     assert s.discovery_cron == "0 * * * *" and s.sync_cron == "0 3 * * *"
     assert s.dry_run is False
     assert s.backup_keep == 7 and s.backup_dir == Path("/backup")
+    assert s.job_gap_min == 1 and s.job_gap_max == 10
     assert s.db_url.startswith("sqlite:///") and s.db_url.endswith("app.db")
 
 
@@ -43,3 +44,7 @@ def test_invalid_cron_and_sleep():
         Settings(youtube_channel="@x", sync_cron="not a cron")
     with pytest.raises(ValidationError):
         Settings(youtube_channel="@x", sleep_min=10, sleep_max=1)
+    with pytest.raises(ValidationError):
+        Settings(youtube_channel="@x", job_gap_min=5, job_gap_max=1)
+    with pytest.raises(ValidationError):
+        Settings(youtube_channel="@x", job_gap_min=-1)

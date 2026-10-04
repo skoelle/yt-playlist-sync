@@ -58,6 +58,7 @@ Download layout: `/data/<Playlist title> [<playlist id>]/<NN> - <Title> [<video 
 | `PUID` / `PGID` | `1000` / `1000` | Owner of written files |
 | `UMASK` | `0022` | File creation mask |
 | `SLEEP_MIN` / `SLEEP_MAX` | `3` / `10` | Seconds to sleep between videos |
+| `JOB_GAP_MIN` / `JOB_GAP_MAX` | `1` / `10` | Random seconds to wait between two playlists (jobs) |
 | `YTDLP_EXTRA_ARGS` | empty | Extra yt-dlp arguments, for example `--limit-rate 5M` |
 | `YTDLP_BIN` | `yt-dlp` | yt-dlp executable (tests use a stub) |
 | `HC_DISCOVERY_URL` / `HC_SYNC_URL` | empty | Healthchecks ping URLs (`/start`, success, `/fail`) |
@@ -95,6 +96,7 @@ only overwritten, nothing is deleted), start the container.
 - 🔁 *Full Re-Run* re-checks a finished oneshot against the archive and downloads whatever is missing. Existing files and archives are never deleted.
 - ⏸️ If YouTube answers with HTTP 429 or a bot check, the current job stops and the queue pauses for 30 minutes.
 - 🚫 The same happens on HTTP 403 while downloading (`unable to download video data`): the job stops immediately instead of grinding through the playlist, the playlist shows *failed*, and a yt-dlp update check is triggered during the pause.
+- 🔀 Playlists are never started back-to-back: the queue waits a random 1–10 seconds between two jobs (`JOB_GAP_MIN`/`JOB_GAP_MAX`), so yt-dlp process starts are not metronomic. The first job after an idle queue starts immediately.
 - ⏭️ The hourly discovery is skipped while any download is queued or running (including a rate-limit pause) — it retries in the next hourly slot. The manual *Run discovery* button always runs.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import time
 from collections.abc import Callable
 from datetime import timedelta
@@ -39,6 +40,7 @@ class JobQueue:
         self._handle: ProcessHandle | None = None
         self._stopping = False
         self._last_persist = 0.0
+        self._gap_pending = False
 
     # ------------------------------------------------------------ lifecycle
     async def start(self) -> None:
@@ -155,24 +157,39 @@ class JobQueue:
                 .order_by(Job.priority, Job.queued_at, Job.id).limit(1)
             )
 
+    async def _wait_gap(self) -> None:
+        """Randomized pause between two jobs so back-to-back starts are not metronomic (SPEC 6.6)."""
+        lo, hi = self.settings.job_gap_min, self.settings.job_gap_max
+        if hi <= 0:
+            return
+        delay = random.uniform(lo, hi) if hi > lo else float(lo)
+        log.debug("waiting %.1fs before next job", delay)
+        await asyncio.sleep(delay)
+
     async def _worker(self) -> None:
         while not self._stopping:
             wait = self._paused_seconds()
             if wait > 0:
+                self._gap_pending = False
                 await asyncio.sleep(min(wait, 30))
                 continue
             if not self.settings.dry_run and not self.settings.data_writable():
+                self._gap_pending = False
                 log.error("%s is not writable, downloads are paused", self.settings.data_dir)
                 await asyncio.sleep(60)
                 continue
             self._wakeup.clear()
             job_id = self._next_job()
             if job_id is None:
+                self._gap_pending = False
                 try:
                     await asyncio.wait_for(self._wakeup.wait(), timeout=30)
                 except asyncio.TimeoutError:
                     pass
                 continue
+            if self._gap_pending:
+                self._gap_pending = False
+                await self._wait_gap()
             try:
                 await self._run_job(job_id)
             except asyncio.CancelledError:
@@ -180,6 +197,8 @@ class JobQueue:
             except Exception as exc:  # noqa: BLE001
                 log.exception("job %s crashed", job_id)
                 self._mark_crashed(job_id, str(exc))
+            finally:
+                self._gap_pending = True
 
     def _mark_crashed(self, job_id: int, message: str) -> None:
         with session_scope() as s:

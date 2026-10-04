@@ -33,7 +33,7 @@ FastAPI (app/main.py, Lifespan)
 | `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url`, `read_video_entries` (Galerie inkl. Tech-Metadaten), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
 | `app/runner.py` | `RunParams`/`RunResult` (Feld `forbidden` für 403-Abbruch), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung |
-| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States, Pause bei 429/403, `on_forbidden`-Callback |
+| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States, Pause bei 429/403, `on_forbidden`-Callback, Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen), `run_discovery` mit Leerlistenschutz |
 | `app/scheduler.py` | Cron-Jobs, Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update) |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
@@ -72,7 +72,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **67 Tests grün** (`pytest -q`, ~13 s).
+- Bestehender Stand: **68 Tests grün** (`pytest -q`, ~14 s).
 
 ## Harte Regeln
 
@@ -113,7 +113,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (67), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (68), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License
