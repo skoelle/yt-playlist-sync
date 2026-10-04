@@ -62,6 +62,14 @@ def test_private_marker_in_listing_is_skipped(tmp_path, stub):
     assert res.success and res.skipped == 1
 
 
+def test_run_result_carries_listing_entries(tmp_path, stub):
+    """RunResult.entries is the snapshot jobqueue persists for the gallery placeholders."""
+    res = run(params(tmp_path, stub))
+    assert [(e.id, e.position, e.title) for e in res.entries] == [
+        ("vid00000001", 1, "One"), ("vid00000002", 2, "Two"), ("vid00000003", 3, "Three"),
+    ]
+
+
 def test_dry_run_writes_nothing(tmp_path, stub):
     res = run(params(tmp_path, stub, dry_run=True))
     assert res.success and res.new_count == 3
@@ -109,3 +117,4 @@ def test_cancel_running_job(tmp_path, stub):
 def test_listing_failure_returns_failed_result(tmp_path, stub):
     res = run(params(tmp_path, stub, pid="PLunknown"))
     assert not res.success and "Could not list playlist" in res.error_summary
+    assert res.entries == []  # no snapshot: jobqueue must keep the previous listing

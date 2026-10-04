@@ -28,16 +28,16 @@ FastAPI (app/main.py, Lifespan)
 |---|---|
 | `app/config.py` | `Settings` (pydantic-settings), ENV-Validierung (Cron, TZ, Sleep), Pfade, `data_writable()` |
 | `app/db.py` | Engine-Init (Global!), WAL-PRAGMAs, `session_scope()`, `utcnow()` (naives UTC), `migrate()` |
-| `app/models.py` | `Playlist`, `Job`, `Run` + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
+| `app/models.py` | `Playlist`, `Job`, `Run`, `PlaylistEntry` (Listing-Snapshot) + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
 | `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `backup_archives` (tar.gz von `archives/`), `sqlite_path`, Integritätschecks, Rotation `BACKUP_KEEP` je Namensmuster |
-| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url`, `read_video_entries` (Galerie inkl. Tech-Metadaten), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear) |
+| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`, `channel_playlists_url`, `parse_video_listing` (Position/Dauer/Unavailable), `read_video_entries` (Galerie inkl. Tech-Metadaten), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
-| `app/runner.py` | `RunParams`/`RunResult` (Feld `forbidden` für 403-Abbruch), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung |
-| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States, Pause bei 429/403, `on_forbidden`-Callback, Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
+| `app/runner.py` | `RunParams`/`RunResult` (Feld `forbidden` für 403-Abbruch, Feld `entries` = Listing-Snapshot), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung |
+| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States und `_persist_entries` (Upsert `playlist_entries`, nie löschen), Pause bei 429/403, `on_forbidden`-Callback, Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen), `run_discovery` mit Leerlistenschutz |
 | `app/scheduler.py` | Cron-Jobs (Sync inkl. `SYNC_JITTER`, Update, Cleanup, Backup) + Discovery als Intervall (`_schedule_discovery`/`_discovery_tick`, `DISCOVERY_INTERVAL_MIN/MAX`), Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update) |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
-| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung) |
+| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
 
 Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py`.
@@ -72,7 +72,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **72 Tests grün** (`pytest -q`, ~15 s).
+- Bestehender Stand: **79 Tests grün** (`pytest -q`, ~17 s).
 
 ## Harte Regeln
 
@@ -113,7 +113,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (72), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (79), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

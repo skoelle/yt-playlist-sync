@@ -4,7 +4,17 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -85,3 +95,23 @@ class Run(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="running")
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class PlaylistEntry(Base):
+    """One remote playlist entry (snapshot from the last sync listing). Rows are never deleted."""
+
+    __tablename__ = "playlist_entries"
+    __table_args__ = (
+        UniqueConstraint("playlist_id", "video_id", name="uq_playlist_entries_pl_video"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    playlist_id: Mapped[int] = mapped_column(ForeignKey("playlists.id"), index=True)
+    video_id: Mapped[str] = mapped_column(String(16))
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    title: Mapped[str] = mapped_column(String(500), default="")
+    duration_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    unavailable: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    remote_present: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime)

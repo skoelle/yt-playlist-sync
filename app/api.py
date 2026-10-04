@@ -15,8 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from .db import session_scope
-from .models import Job, Playlist, Run
-from .ytdlp import read_video_entries
+from .models import Job, Playlist, PlaylistEntry, Run
+from .ytdlp import read_archive, read_video_entries
 
 router = APIRouter(prefix="/api")
 _background: set[asyncio.Task] = set()
@@ -179,15 +179,55 @@ _EMPTY_VIDEOS: dict[str, Any] = {
 }
 
 
+def _missing_entry(e: dict[str, Any], archived: set[str]) -> dict[str, Any]:
+    """Placeholder row for a remote playlist entry that has no local file."""
+    if e["unavailable"]:
+        status, reason = "unavailable", e["reason"]
+    elif e["reason"]:
+        status, reason = "failed", e["reason"]
+    elif e["video_id"] in archived:
+        status, reason = "archived", None
+    else:
+        status, reason = "pending", None
+    return {
+        "index": e["position"], "video_id": e["video_id"],
+        "title": e["title"] or e["video_id"], "file": None, "thumb": None,
+        "duration_s": e["duration_s"], "upload_date": None, "view_count": None,
+        "like_count": None, "channel": None, "resolution": None, "vcodec": None,
+        "acodec": None, "vbr": None, "abr": None, "size_bytes": 0, "sidecars": [],
+        "missing": True, "status": status, "reason": reason,
+    }
+
+
 @router.get("/playlists/{pid}/videos")
 async def playlist_videos(pid: int, request: Request) -> dict[str, Any]:
+    cfg = request.app.state.settings
     with session_scope() as s:
         pl = _get_playlist(s, pid)
         folder_name, playlist_id = pl.folder_name, pl.playlist_id
-    target = _playlist_folder(request.app.state.settings, folder_name)
-    if target is None:
-        return dict(_EMPTY_VIDEOS)
-    return read_video_entries(target, playlist_id)
+        rows = s.scalars(
+            select(PlaylistEntry).where(
+                PlaylistEntry.playlist_id == pl.id, PlaylistEntry.remote_present.is_(True)
+            ).order_by(PlaylistEntry.position, PlaylistEntry.video_id)
+        ).all()
+        entries = [
+            {"video_id": r.video_id, "position": r.position, "title": r.title,
+             "duration_s": r.duration_s, "unavailable": r.unavailable, "reason": r.reason}
+            for r in rows
+        ]
+    target = _playlist_folder(cfg, folder_name)
+    gallery = dict(_EMPTY_VIDEOS) if target is None else read_video_entries(target, playlist_id)
+    if not entries:
+        return gallery
+    have = {v["video_id"] for v in gallery["videos"] if v["video_id"]}
+    open_entries = [e for e in entries if e["video_id"] not in have]
+    if open_entries:
+        archive = read_archive(cfg.config_dir / "archives" / f"{playlist_id}.txt")
+        gallery["videos"] = sorted(
+            gallery["videos"] + [_missing_entry(e, archive) for e in open_entries],
+            key=lambda v: (v.get("index") or 0, 1 if v.get("missing") else 0, v.get("video_id") or ""),
+        )
+    return gallery
 
 
 _IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}

@@ -247,7 +247,42 @@ function renderSyncs() {
   setText("sync-summary", `${state.syncs.length} Sync-Playlists | ${videos} Videos | ${fmtBytes(size)}`);
 }
 
+const BROKEN_ICON = `<svg viewBox="0 0 32 18" aria-hidden="true" focusable="false">
+    <rect x="1" y="1" width="30" height="16" rx="3"></rect>
+    <path d="M12 5.5 L20 12.5 M20 5.5 L12 12.5"></path></svg>`;
+const MISSING_STATUS = {
+  unavailable: { label: "unavailable", cls: "s-unavailable" },
+  failed: { label: "failed", cls: "s-failed" },
+  pending: { label: "not downloaded", cls: "s-pending" },
+  archived: { label: "file missing", cls: "s-archived" },
+};
+
+function videoKey(v) {
+  return v.file || `v:${v.video_id || v.index}`;
+}
+
+function playableVideos() {
+  const vids = state.detail && state.detail.vids ? state.detail.vids.videos : [];
+  return vids.filter((v) => v.file);
+}
+
+function missingRow(v) {
+  const st = MISSING_STATUS[v.status] || { label: v.status, cls: "" };
+  const dur = v.duration_s != null ? `<span class="vid-dur">${fmtClock(v.duration_s)}</span>` : "";
+  const title = v.video_id
+    ? `<a href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}" target="_blank" rel="noopener" title="Open on YouTube">${esc(v.title)}</a>`
+    : esc(v.title);
+  const meta = [];
+  if (v.index) meta.push(`#${v.index}`);
+  meta.push(`<span class="badge ${st.cls}">${esc(st.label)}</span>`);
+  const reason = v.reason ? `<div class="vid-reason">${esc(v.reason)}</div>` : "";
+  return `<td class="vid-td-thumb"><div class="vid-thumb vid-thumb-broken">${BROKEN_ICON}</div>${dur}</td>
+    <td><div class="vid-title">${title}</div>
+    <div class="vid-meta">${meta.join(" ")}</div>${reason}</td>`;
+}
+
 function videoRow(v) {
+  if (v.missing) return missingRow(v);
   const thumb = v.thumb
     ? `<img class="vid-thumb" loading="lazy" alt="" src="/api/playlists/${state.detailId}/thumb?file=${encodeURIComponent(v.thumb)}">`
     : `<div class="vid-thumb vid-thumb-empty"></div>`;
@@ -346,18 +381,16 @@ function renderDetail(p, f, vids) {
   setText("detail-video-summary", `${vids.video_count} / ${p.remote_item_count ?? vids.video_count}`);
   const vnone = $("#detail-videos-none");
   const vwrap = $("#detail-videos-wrap");
-  if (!vids.exists) {
-    vnone.textContent = "Folder does not exist (yet) – files will appear here after the first download.";
-    vnone.hidden = false;
-    vwrap.hidden = true;
-  } else if (!vids.video_count) {
-    vnone.textContent = "No video files found.";
+  if (!vids.videos.length) {
+    vnone.textContent = !vids.exists
+      ? "Folder does not exist (yet) – files will appear here after the first download."
+      : "No video files found.";
     vnone.hidden = false;
     vwrap.hidden = true;
   } else {
     vnone.hidden = true;
     vwrap.hidden = false;
-    syncRows($("#detail-videos-table tbody"), vids.videos, (x) => x.file, videoRow);
+    syncRows($("#detail-videos-table tbody"), vids.videos, videoKey, videoRow);
   }
 
   if (!f.exists) {
@@ -385,7 +418,7 @@ function closePlayer() {
 
 function renderPlayer() {
   const P = state.player;
-  const vids = state.detail && state.detail.vids ? state.detail.vids.videos : [];
+  const vids = playableVideos();
   const i = P ? vids.findIndex((x) => x.file === P.file) : -1;
   if (i < 0) { closePlayer(); return; }
   const v = vids[i];
@@ -412,7 +445,7 @@ function renderPlayer() {
 
 function playerMove(delta) {
   const P = state.player;
-  const vids = state.detail && state.detail.vids ? state.detail.vids.videos : [];
+  const vids = playableVideos();
   const i = P ? vids.findIndex((x) => x.file === P.file) : -1;
   const target = vids[i + delta];
   if (!target) return;

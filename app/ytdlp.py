@@ -50,6 +50,8 @@ class VideoEntry:
     id: str
     title: str
     unavailable: bool = False
+    position: int = 0
+    duration_s: int | None = None
 
 
 @dataclass
@@ -126,11 +128,17 @@ def parse_playlist_listing(data: dict[str, Any]) -> list[PlaylistInfo]:
 
 def parse_video_listing(data: dict[str, Any]) -> list[VideoEntry]:
     out: list[VideoEntry] = []
-    for e in data.get("entries") or []:
+    for i, e in enumerate(data.get("entries") or [], 1):
         if not isinstance(e, dict) or not e.get("id"):
             continue
         title = e.get("title") or ""
-        out.append(VideoEntry(e["id"], title, title.strip().lower() in UNAVAILABLE_TITLES))
+        duration = e.get("duration")
+        idx = e.get("playlist_index")
+        out.append(VideoEntry(
+            e["id"], title, title.strip().lower() in UNAVAILABLE_TITLES,
+            position=int(idx) if isinstance(idx, int) and idx > 0 else i,
+            duration_s=int(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+        ))
     return out
 
 

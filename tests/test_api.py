@@ -19,7 +19,7 @@ from app.config import Settings  # noqa: E402
 from app.db import session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import Job, Playlist  # noqa: E402
+from app.models import Job, Playlist, PlaylistEntry  # noqa: E402
 from app.paths import sanitize_folder_name  # noqa: E402
 from app.ytdlp import PlaylistInfo  # noqa: E402
 
@@ -188,6 +188,58 @@ def test_playlist_videos_and_thumb(client):
         assert client.get(f"/api/playlists/{pid}/thumb", params={"file": f}).status_code == 404, f
     assert client.get("/api/playlists/9999/videos").status_code == 404
     assert client.get("/api/playlists/9999/thumb", params={"file": "a.jpg"}).status_code == 404
+
+
+def test_playlist_videos_with_placeholders(client):
+    """Missing remote videos show up as placeholder rows with everything we know about them."""
+    apply_discovery([PlaylistInfo("PL1", "Sommer Mix")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+    name = sanitize_folder_name("Sommer Mix", "PL1")
+    with session_scope() as s:
+        s.get(Playlist, pid).folder_name = name
+        for e in (
+            PlaylistEntry(playlist_id=pid, video_id="have0000001", position=1, title="Downloaded",
+                          last_seen_at=utcnow()),
+            PlaylistEntry(playlist_id=pid, video_id="priv0000001", position=2, title="[Private video]",
+                          unavailable=True, last_seen_at=utcnow()),
+            PlaylistEntry(playlist_id=pid, video_id="fail0000001", position=3, title="Broken Song",
+                          duration_s=180, reason="HTTP Error 503: Service Unavailable",
+                          last_seen_at=utcnow()),
+            PlaylistEntry(playlist_id=pid, video_id="arch0000001", position=4, title="Archived",
+                          last_seen_at=utcnow()),
+            PlaylistEntry(playlist_id=pid, video_id="wait0000001", position=5, title="Waiting",
+                          last_seen_at=utcnow()),
+            PlaylistEntry(playlist_id=pid, video_id="gone0000001", position=6, title="Gone",
+                          remote_present=False, last_seen_at=utcnow()),
+        ):
+            s.add(e)
+    # placeholders are shown even before the folder exists
+    v = client.get(f"/api/playlists/{pid}/videos").json()
+    assert v["exists"] is False and len(v["videos"]) == 5
+    d = client.app.state.settings.data_dir / name
+    d.mkdir(parents=True)
+    (d / "01 - Downloaded [have0000001].mkv").write_bytes(b"video-bytes")
+    archive = client.app.state.settings.config_dir / "archives" / "PL1.txt"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_text("youtube arch0000001\n")
+
+    v = client.get(f"/api/playlists/{pid}/videos").json()
+    assert v["exists"] is True and v["video_count"] == 1
+    videos = v["videos"]
+    assert [x["video_id"] for x in videos] == [
+        "have0000001", "priv0000001", "fail0000001", "arch0000001", "wait0000001",
+    ]  # ordered by position, the remote-removed entry stays hidden
+    assert not videos[0].get("missing") and videos[0]["file"] is not None
+    broken = videos[1:5]
+    assert all(x["missing"] and x["file"] is None for x in broken)
+    assert [(x["status"], x["reason"]) for x in broken] == [
+        ("unavailable", None),
+        ("failed", "HTTP Error 503: Service Unavailable"),
+        ("archived", None),
+        ("pending", None),
+    ]
+    assert videos[2]["title"] == "Broken Song" and videos[2]["duration_s"] == 180
+    assert videos[1]["title"] == "[Private video]"
 
 
 def test_playlist_video_stream(client):

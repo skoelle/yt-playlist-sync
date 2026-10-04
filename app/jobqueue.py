@@ -16,7 +16,7 @@ from sqlalchemy import select
 from . import ytdlp
 from .config import Settings
 from .db import session_scope, utcnow
-from .models import Job, Playlist
+from .models import Job, Playlist, PlaylistEntry
 from .paths import sanitize_folder_name
 from .runner import ProcessHandle, RunParams, RunResult, run_playlist
 
@@ -314,6 +314,8 @@ class JobQueue:
 
             if r.total:
                 pl.remote_item_count = r.total
+            if r.entries:
+                self._persist_entries(s, pl, r)
             if r.cancelled:
                 pl.state = "failed" if playlist_type == "oneshot" else "idle"
                 return
@@ -335,3 +337,45 @@ class JobQueue:
                     pl.last_sync_at = utcnow()
             else:
                 pl.state = "failed"
+
+    def _persist_entries(self, s, pl: Playlist, r: RunResult) -> None:
+        """Upsert the remote listing snapshot of this run. Rows are updated, never deleted."""
+        now = utcnow()
+        rows = {
+            e.video_id: e for e in s.scalars(
+                select(PlaylistEntry).where(PlaylistEntry.playlist_id == pl.id)
+            ).all()
+        }
+        for entry in r.entries:
+            row = rows.get(entry.id)
+            if row is None:
+                row = PlaylistEntry(playlist_id=pl.id, video_id=entry.id, last_seen_at=now)
+                s.add(row)
+                rows[entry.id] = row
+            row.position = entry.position
+            row.title = entry.title[:500]
+            row.duration_s = entry.duration_s
+            row.unavailable = entry.unavailable
+            row.remote_present = True
+            row.last_seen_at = now
+        listed = {e.id for e in r.entries}
+        for vid, row in rows.items():
+            if vid not in listed:
+                row.remote_present = False
+        for err in r.errors:
+            vid = err.get("id")
+            if not vid:
+                continue
+            row = rows.get(vid)
+            if row is None:  # vanished from the listing between listing and finalize
+                row = PlaylistEntry(playlist_id=pl.id, video_id=vid, last_seen_at=now)
+                s.add(row)
+                rows[vid] = row
+            row.reason = str(err.get("message") or "")[:1000] or None
+            if err.get("permanent"):
+                row.unavailable = True
+        archive = self.settings.config_dir / "archives" / f"{pl.playlist_id}.txt"
+        archived = ytdlp.read_archive(archive)
+        for vid, row in rows.items():
+            if vid in archived:
+                row.reason = None
