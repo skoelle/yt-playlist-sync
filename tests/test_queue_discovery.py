@@ -24,7 +24,7 @@ from app.ytdlp import PlaylistInfo  # noqa: E402
 def cfg(tmp_path, stub):
     c = Settings(
         youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config",
-        ytdlp_bin=stub.bin, sleep_min=0, sleep_max=0,
+        ytdlp_bin=stub.bin, sleep_min=0, sleep_max=0, job_gap_min=0, job_gap_max=0,
     )
     ensure_dirs(c)
     init_engine(c.db_url)
@@ -90,6 +90,30 @@ def test_discovery_runs_when_idle(cfg, stub, monkeypatch):
     assert [k for k, _ in pings] == ["start", "success"]
     runs = discovery_runs()
     assert len(runs) == 1 and runs[0][0] == "success"
+
+
+def test_job_gap_between_playlists(cfg, stub):
+    """Zwei Jobs laufen nicht metronomisch hintereinander ab, sondern mit zufälliger Pause (SPEC 6.6)."""
+    cfg.job_gap_min = 1
+    cfg.job_gap_max = 1
+    apply_discovery([PlaylistInfo("PLaaa", "Sommer Mix"),
+                     PlaylistInfo("PLbbb", "Konzert SETLIST 2024")], "setlist")
+    with session_scope() as s:
+        pks = {p.playlist_id: p.id for p in s.scalars(select(Playlist)).all()}
+    queue = JobQueue(cfg)
+    jids = [queue.enqueue(pks["PLaaa"], "manual"), queue.enqueue(pks["PLbbb"], "manual")]
+
+    async def scenario():
+        await queue.start()
+        await queue.wait_for_jobs(jids, poll=0.2)
+        await queue.stop()
+
+    asyncio.run(scenario())
+    with session_scope() as s:
+        first, second = s.get(Job, jids[0]), s.get(Job, jids[1])
+        assert first.status == "success" and second.status == "success"
+        delta = (second.started_at - first.finished_at).total_seconds()
+    assert delta >= 0.9
 
 
 def test_forbidden_job_fails_playlist_pauses_and_triggers_update(cfg, stub):

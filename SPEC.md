@@ -78,6 +78,7 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 | `DATABASE_URL` | SQLite in `/config` | SQLAlchemy URL |
 | `PUID` / `PGID` / `UMASK` | `1000` / `1000` / `0022` | Dateirechte |
 | `SLEEP_MIN` / `SLEEP_MAX` | `3` / `10` | Pause zwischen Videos in Sekunden |
+| `JOB_GAP_MIN` / `JOB_GAP_MAX` | `1` / `10` | Zufällige Pause zwischen zwei Jobs (Playlists) in Sekunden |
 | `YTDLP_EXTRA_ARGS` | leer | Zusätzliche yt-dlp Argumente |
 | `YTDLP_BIN` | `yt-dlp` | Programm (Tests nutzen einen Stub) |
 | `HC_DISCOVERY_URL` / `HC_SYNC_URL` | leer | Healthchecks Ping-URLs |
@@ -145,6 +146,7 @@ yt-dlp \
 - Pro Playlist maximal ein offener Job.
 - Beim Start werden `running`-Jobs auf `interrupted` gesetzt und neu eingereiht.
 - Beim Beenden: SIGTERM an yt-dlp, nach 30 s SIGKILL. `.part` Dateien werden fortgesetzt.
+- **Job-Gap:** Vor dem zweiten und jedem weiteren Job wartet der Worker eine zufällige Pause von `JOB_GAP_MIN`..`JOB_GAP_MAX` Sekunden (Default 1–10, `random.uniform`), damit zwei yt-dlp-Prozesse nicht metronomisch aufeinanderfolgen. Vor dem ersten Job nach Leerlauf gibt es kein Gap – ein manueller Start läuft sofort. Nach einer Rate-Limit-/403-Pause und bei nicht schreibbarem `DATA_DIR` wird das Gap verworfen (die Pause selbst reicht als Abstand).
 - HTTP 429 oder Bot-Check: Job bricht ab (`failed`), Queue pausiert 30 Minuten.
 - **HTTP 403** (z. B. `unable to download video data: HTTP Error 403: Forbidden`): Job bricht sofort ab statt durch die Playlist weiterzureichen – `failed`, Playlist `failed`, Queue pausiert 30 Minuten wie bei 429. Zusätzlich wird ein yt-dlp-Update-Check angestoßen (siehe 6.7). Auch ein 403 beim Auflisten der Playlist löst Abbruch und Pause aus. 403 gilt als temporär (nicht `permanent`): die Videos zählen als `missing`, Retry und nächster Nachtlauf bleiben möglich.
 
@@ -266,3 +268,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Neu: Das nächtliche Backup enthält zusätzlich die Download-Archive als `archives-*.tar.gz` (siehe 6.9).
 - Neu: Die stündliche Discovery wird übersprungen, solange die Queue nicht leer ist; der manuelle Button überspringt nicht (siehe 6.1).
 - Neu: HTTP 403 bricht Jobs sofort ab (Pause wie 429, Playlist `failed`) und stößt einen yt-dlp-Update-Check an (siehe 6.6/6.7).
+- Neu: Zufällige Pause von `JOB_GAP_MIN`..`JOB_GAP_MAX` Sekunden zwischen zwei Jobs, damit yt-dlp-Starts nicht metronomisch sind (siehe 6.6).

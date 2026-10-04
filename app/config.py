@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     pgid: int = 1000
     sleep_min: int = 3
     sleep_max: int = 10
+    job_gap_min: int = 1
+    job_gap_max: int = 10
     ytdlp_extra_args: str = ""
     ytdlp_bin: str = "yt-dlp"
     hc_discovery_url: str = ""
@@ -62,6 +64,8 @@ class Settings(BaseSettings):
     def _check_sleep(self) -> Settings:
         if self.sleep_min > self.sleep_max:
             raise ValueError("SLEEP_MIN must be <= SLEEP_MAX")
+        if self.job_gap_min < 0 or self.job_gap_min > self.job_gap_max:
+            raise ValueError("JOB_GAP_MIN must be >= 0 and <= JOB_GAP_MAX")
         if self.backup_keep < 0:
             raise ValueError("BACKUP_KEEP must be >= 0")
         return self
