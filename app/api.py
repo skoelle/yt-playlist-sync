@@ -331,7 +331,7 @@ def _spawn(coro) -> None:
 
 @router.post("/discovery/run", status_code=202)
 async def run_discovery_now(request: Request) -> dict[str, Any]:
-    _spawn(request.app.state.scheduler.discovery_job())
+    _spawn(request.app.state.scheduler.discovery_job(force=True))
     return {"started": True}
 
 

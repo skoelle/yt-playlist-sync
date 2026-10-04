@@ -67,6 +67,7 @@ Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
 - [x] `app/scheduler.py` (Discovery, Nachtsync, yt-dlp-Update, Startlauf, Log-Cleanup)
 - [x] Nachtliches DB-Backup 0:30 (`app/backup.py`, sqlite3-Backup-API, `BACKUP_DIR`/`BACKUP_KEEP`)
 - [x] Download-Archive im Nachtbackup (`backup_archives`: tar.gz von `archives/`, eigene Rotation, Integritätscheck durch Einlesen)
+- [x] Discovery-Skip bei lauter Queue (`discovery_job(force=False)`: überspringt, solange Jobs queued/running, HC success `skipped: queue busy`; manueller Button mit `force=True` läuft immer)
 
 Abnahme: Discovery läuft per Cron, `runs` korrekt. **Erfüllt (stündliche Discovery im laufenden Container).**
 
@@ -117,3 +118,4 @@ Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Erfüllt (public).**
 - Compose-Beispiel zeigt die echte öffentliche Image-URL `ghcr.io/skoelle/yt-playlist-sync:latest` und Übergabe von `ONESHOT_KEYWORD` per Interpolation (wie `YOUTUBE_CHANNEL`), nicht mehr hartkodiert; README-Raw-URL entsprechend korrigiert.
 - `renovate.json` ergänzt: `config:recommended`, Schedule „before 6am on Monday", Gruppen für GitHub Actions (automerge), Docker/Docker Compose (manuell), Python dependencies (automerge).
 - `.moonweb.yml` für die Projektübersicht (category `code`, subcategory „Archiving Tools").
+- Discovery-Skip: Der stündliche Lauf startet kein zweites yt-dlp, solange die Queue nicht leer ist (`queue.is_idle()` deckt auch die 429-Pause ab). Kein `runs`-Eintrag beim Skip (Statuswert `"skipped"` hieße CheckConstraint-/Schema-Änderung – Log + HC-Message reichen); Healthcheck bekommt success `skipped: queue busy`, damit er nicht „late" meldet. Der manuelle Button behält `force=True`, weil er explizitem Nutzerwunsch folgt.

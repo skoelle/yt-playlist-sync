@@ -74,8 +74,12 @@ class AppScheduler:
         await self.update_ytdlp(wait_for_idle=False)
         await self.discovery_job()
 
-    async def discovery_job(self) -> None:
+    async def discovery_job(self, force: bool = False) -> None:
         url = self.settings.hc_discovery_url
+        if not force and not self.queue.is_idle():
+            log.info("discovery skipped: queue busy (jobs queued/running)")
+            await ping(url, "success", "skipped: queue busy")
+            return
         await ping(url, "start")
         try:
             stats = await run_discovery(self.settings, self.queue)
