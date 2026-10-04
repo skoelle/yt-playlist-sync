@@ -72,7 +72,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **70 Tests grün** (`pytest -q`, ~15 s).
+- Bestehender Stand: **71 Tests grün** (`pytest -q`, ~15 s).
 
 ## Harte Regeln
 
@@ -113,7 +113,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (70), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (71), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License
