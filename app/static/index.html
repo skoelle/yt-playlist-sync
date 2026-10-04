@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de) -->
 <!-- Licensed under the MIT License. See LICENSE file in project root for details. -->
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,7 +22,7 @@
 <div id="banners"></div>
 <main>
   <div id="log-panel" class="card" hidden>
-    <h2>Log <span id="log-title" class="muted"></span> <button data-action="close-log">Schließen</button></h2>
+    <h2>Log <span id="log-title" class="muted"></span> <button data-action="close-log">Close</button></h2>
     <pre id="log-pre"></pre>
   </div>
   <div id="player" class="player" hidden>
@@ -31,58 +31,58 @@
         <span id="player-title"></span>
         <span id="player-count" class="muted"></span>
         <a id="player-yt" class="ext" target="_blank" rel="noopener" hidden>↗ YouTube</a>
-        <button data-action="player-close" class="player-close">Schließen ✕</button>
+        <button data-action="player-close" class="player-close">Close ✕</button>
       </div>
       <video id="player-video" controls autoplay playsinline></video>
       <div class="actions player-nav">
-        <button data-action="player-prev" id="player-prev">← Vorheriges</button>
-        <button data-action="player-next" id="player-next">Nächstes →</button>
+        <button data-action="player-prev" id="player-prev">← Previous</button>
+        <button data-action="player-next" id="player-next">Next →</button>
       </div>
     </div>
   </div>
   <section id="tab-status" data-tab="status">
     <div class="cards">
       <div class="card">
-        <h2>Aktueller Job</h2>
-        <div id="current-empty" class="muted">Kein Job aktiv.</div>
+        <h2>Current Job</h2>
+        <div id="current-empty" class="muted">No active job.</div>
         <div id="current-box" hidden>
           <div><strong id="cur-title"></strong></div>
           <div class="muted" id="cur-item"></div>
           <div class="bar"><div id="cur-bar"></div></div>
           <div class="muted" id="cur-meta"></div>
           <div class="actions">
-            <button data-action="show-current-log">Log anzeigen</button>
-            <button data-action="cancel-current" class="danger">Abbrechen</button>
+            <button data-action="show-current-log">Show log</button>
+            <button data-action="cancel-current" class="danger">Cancel</button>
           </div>
         </div>
       </div>
       <div class="card">
-        <h2>Zeitpläne</h2>
+        <h2>Schedules</h2>
         <table class="kv">
-          <tr><th>Discovery zuletzt</th><td id="sch-d-last"></td></tr>
-          <tr><th>Discovery nächster</th><td id="sch-d-next"></td></tr>
-          <tr><th>Nachtsync zuletzt</th><td id="sch-s-last"></td></tr>
-          <tr><th>Nachtsync nächster</th><td id="sch-s-next"></td></tr>
+          <tr><th>Discovery last</th><td id="sch-d-last"></td></tr>
+          <tr><th>Discovery next</th><td id="sch-d-next"></td></tr>
+          <tr><th>Nightly sync last</th><td id="sch-s-last"></td></tr>
+          <tr><th>Nightly sync next</th><td id="sch-s-next"></td></tr>
         </table>
         <div class="actions">
-          <button data-action="discovery-now">Discovery jetzt</button>
-          <button data-action="sync-now">Sync jetzt</button>
+          <button data-action="discovery-now">Run discovery now</button>
+          <button data-action="sync-now">Run sync now</button>
         </div>
       </div>
       <div class="card">
         <h2>System</h2>
         <table class="kv">
-          <tr><th>Kanal</th><td id="sys-channel"></td></tr>
+          <tr><th>Channel</th><td id="sys-channel"></td></tr>
           <tr><th>yt-dlp</th><td id="sys-ytdlp"></td></tr>
-          <tr><th>Freier Platz</th><td id="sys-free"></td></tr>
-          <tr><th>Warteschlange</th><td id="sys-queue"></td></tr>
+          <tr><th>Free space</th><td id="sys-free"></td></tr>
+          <tr><th>Queue</th><td id="sys-queue"></td></tr>
         </table>
       </div>
     </div>
-    <h2>Letzte Jobs</h2>
+    <h2>Recent jobs</h2>
     <div class="table-wrap">
     <table id="jobs-table">
-      <thead><tr><th>#</th><th>Playlist</th><th>Trigger</th><th>Status</th><th>Dauer</th><th>Neu</th><th>Übersprungen</th><th>Fehler</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Playlist</th><th>Trigger</th><th>Status</th><th>Duration</th><th>New</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     </div>
@@ -92,8 +92,8 @@
     <p class="muted" id="sync-summary"></p>
     <div class="table-wrap">
     <table id="sync-table">
-      <thead><tr><th data-sort="title">Titel</th><th data-sort="videos">Videos</th><th data-sort="size">Größe</th>
-        <th data-sort="last">Letzter Sync</th><th>Nächster Sync</th><th data-sort="state">Status</th><th>Aktionen</th></tr></thead>
+      <thead><tr><th data-sort="title">Title</th><th data-sort="videos">Videos</th><th data-sort="size">Size</th>
+        <th data-sort="last">Last sync</th><th>Next sync</th><th data-sort="state">Status</th><th>Actions</th></tr></thead>
       <tbody></tbody>
     </table>
     </div>
@@ -104,9 +104,9 @@
     <div class="table-wrap">
     <table id="oneshot-table">
       <thead><tr>
-        <th data-sort="title">Titel</th><th data-sort="date">Heruntergeladen am</th>
-        <th data-sort="songs">Songs</th><th data-sort="size">Größe</th>
-        <th data-sort="duration">Dauer</th><th data-sort="state">Status</th><th>Aktionen</th>
+        <th data-sort="title">Title</th><th data-sort="date">Downloaded on</th>
+        <th data-sort="songs">Songs</th><th data-sort="size">Size</th>
+        <th data-sort="duration">Duration</th><th data-sort="state">Status</th><th>Actions</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -115,7 +115,7 @@
 
   <section id="tab-playlist" data-tab="playlist" hidden>
     <div class="detail-head">
-      <a id="detail-back" href="#status">← Zurück</a>
+      <a id="detail-back" href="#status">← Back</a>
       <div class="hero">
         <img id="detail-cover" alt="" hidden>
         <div class="hero-text">
@@ -138,26 +138,26 @@
     </div>
     <div class="cards">
       <div class="card">
-        <h2>Playlist-Daten</h2>
+        <h2>Playlist data</h2>
         <table class="kv"><tbody id="detail-kv"></tbody></table>
       </div>
       <div class="card">
         <details id="detail-files-details">
-          <summary class="files-summary">Alle Dateien <span id="detail-files-summary" class="muted"></span></summary>
-          <div id="detail-files-none" class="muted" hidden>Ordner existiert (noch) nicht – Dateien erscheinen hier, sobald der erste Download lief.</div>
+          <summary class="files-summary">All files <span id="detail-files-summary" class="muted"></span></summary>
+          <div id="detail-files-none" class="muted" hidden>Folder does not exist (yet) – files will appear here after the first download.</div>
           <div class="table-wrap" id="detail-files-wrap" hidden>
             <table id="detail-files-table">
-              <thead><tr><th>Datei</th><th>Größe</th><th>Geändert</th></tr></thead>
+              <thead><tr><th>File</th><th>Size</th><th>Modified</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
         </details>
       </div>
     </div>
-    <h2>Job-Verlauf</h2>
+    <h2>Job history</h2>
     <div class="table-wrap">
       <table id="detail-jobs-table">
-        <thead><tr><th>#</th><th>Trigger</th><th>Status</th><th>Dauer</th><th>Neu</th><th>Übersprungen</th><th>Fehler</th><th></th></tr></thead>
+        <thead><tr><th>#</th><th>Trigger</th><th>Status</th><th>Duration</th><th>New</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

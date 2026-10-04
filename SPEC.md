@@ -133,7 +133,7 @@ yt-dlp \
 ### 6.4 Oneshot-Logik
 - Erster Lauf lädt komplett.
 - **`done`**, wenn jedes Video im Archive steht oder dauerhaft unavailable ist (privat, gelöscht, Alters- oder Mitglieder-Beschränkung). Diese zählen als `skipped`.
-- **`failed`**, wenn Videos fehlen, die nicht dauerhaft unavailable sind. Die UI zeigt Fehlerzahl, Meldung und **Erneut versuchen** (lädt nur das Fehlende).
+- **`failed`**, wenn Videos fehlen, die nicht dauerhaft unavailable sind. Die UI zeigt Fehlerzahl, Meldung und **Retry** (lädt nur das Fehlende).
 - Bei `done` wird die Playlist nie wieder automatisch angefasst. Kein Auto-Retry bei `failed`.
 - **Full Re-Run** prüft eine fertige Oneshot erneut gegen das Archive und lädt nur Fehlendes. Nichts wird gelöscht.
 
@@ -199,7 +199,7 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 | GET | `/api/jobs/{id}/log?offset=N` | Log ab Byte-Offset |
 | POST | `/api/discovery/run`, `/api/sync/run` | Manuell starten |
 | POST | `/api/playlists/{id}/run` | Jetzt synchronisieren |
-| POST | `/api/playlists/{id}/retry` | Erneut versuchen (409 wenn nicht `failed`) |
+| POST | `/api/playlists/{id}/retry` | Retry (409 wenn nicht `failed`) |
 | POST | `/api/playlists/{id}/rerun` | Full Re-Run |
 | POST | `/api/playlists/{id}/ignore` | `{"ignored": true}` |
 | POST | `/api/playlists/{id}/type` | `{"type": "sync"}` |
@@ -208,12 +208,12 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 
 ## 9. Web UI
 
-Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-Tab), Zeilen werden per Schlüssel verglichen und nur bei Änderung aktualisiert. Kein Seiten-Reload, Scrollposition und geöffnetes Log bleiben erhalten. Tabs über den URL-Hash, Detailseiten als `#playlist-{id}`.
+Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Header, Badges, Leerzustände, Dialoge, Datums- und Zahlenformate `en-US`); SPEC und dieses Dokument bleiben Deutsch. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-Tab), Zeilen werden per Schlüssel verglichen und nur bei Änderung aktualisiert. Kein Seiten-Reload, Scrollposition und geöffnetes Log bleiben erhalten. Tabs über den URL-Hash, Detailseiten als `#playlist-{id}`.
 
-- **Status:** aktueller Job (Fortschritt, Geschwindigkeit, ETA, Abbrechen), Zeitpläne mit Buttons, System (Kanal, yt-dlp, Platz, Queue), letzte Jobs, Banner (DRY RUN, `/data` nicht beschreibbar, fehlgeschlagene Oneshots, Queue pausiert). Das Log-Panel ist global und öffnet von jeder Ansicht.
-- **Sync-Playlists:** Summenzeile (`n Sync-Playlists | Videos | Größe` in `#sync-summary`, Erklärtext aus v1.0 ersetzt), Titel (verlinkt auf die Detailseite, kleiner ↗-Link nach YouTube), Videos, Größe, letzter und nächster Sync, Status, Aktionen (Jetzt syncen, Ignorieren, Als Oneshot markieren). Sortierbar nach Titel (Standard, aufsteigend), Videos, Größe, letztem Sync und Status, eigenes Sortier-Zustand je Tab; „Nächster Sync" ist nicht sortierbar, weil dort derselbe Scheduler-Zeitpunkt in jeder Zeile steht.
-- **Oneshot-Playlists:** nach Download-Datum sortiert (sortierbar), Songs inkl. übersprungen/fehlgeschlagen, Größe, Dauer, Status, Aktionen (Erneut versuchen, Full Re-Run, Log, Als Sync markieren), Summenzeile.
-- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Größe) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Aufrufe und darunter eine Meta-Zeile mit technischen Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate), vorhandene Sidecar-Dateien als Chips – live gepollt. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC oder Klick auf den Hintergrund schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „Alle Dateien" und der Job-Verlauf der Playlist mit Log-Buttons.
+- **Status:** aktueller Job (Fortschritt, Geschwindigkeit, ETA, **Cancel**), **Schedules** mit Buttons, System (Channel, yt-dlp, Free space, Queue), **Recent jobs**, Banner (DRY RUN, `/data` nicht beschreibbar, fehlgeschlagene Oneshots, Queue pausiert). Das Log-Panel ist global und öffnet von jeder Ansicht.
+- **Sync-Playlists:** Summenzeile (`n Sync-Playlists | Videos | Size` in `#sync-summary`, Erklärtext aus v1.0 ersetzt), Titel (verlinkt auf die Detailseite, kleiner ↗-Link nach YouTube), Videos, Size, letzter und nächster Sync, Status, Aktionen (**Sync now**, **Ignore**, **Mark as oneshot**). Sortierbar nach Titel (Standard, aufsteigend), Videos, Size, letztem Sync und Status, eigenes Sortier-Zustand je Tab; „Next sync" ist nicht sortierbar, weil dort derselbe Scheduler-Zeitpunkt in jeder Zeile steht.
+- **Oneshot-Playlists:** nach Download-Datum sortiert (sortierbar), Songs inkl. übersprungen/fehlgeschlagen (`not available`/`failed`), Size, Duration, Status, Aktionen (**Retry**, **Full Re-Run**, **Log**, **Mark as sync**), Summenzeile.
+- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Size) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Views und darunter eine Meta-Zeile mit technischen Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate), vorhandene Sidecar-Dateien als Chips – live gepollt. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC oder Klick auf den Hintergrund schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „All files" und der Job-Verlauf der Playlist mit Log-Buttons.
 - Dark Mode, relative Zeiten mit Tooltip, responsive.
 
 ## 10. Nicht-funktionale Anforderungen
@@ -239,7 +239,7 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 2. Titel mit "setlist" (beliebige Schreibweise) landen bei Oneshot, alle anderen bei Sync.
 3. Neue Playlists werden spätestens zur nächsten vollen Stunde erkannt und sofort geladen.
 4. Eine fertige Oneshot wird nie wieder automatisch angefasst.
-5. Bei Fehlern steht die Oneshot auf `failed`, "Erneut versuchen" lädt nur Fehlendes.
+5. Bei Fehlern steht die Oneshot auf `failed`, "Retry" lädt nur Fehlendes.
 6. Nie laufen zwei yt-dlp Prozesse gleichzeitig.
 7. Der Nachtsync lädt nur Neues und meldet per Healthchecks Start, Erfolg oder Fehler.
 8. Die UI aktualisiert ohne Seiten-Reload.
@@ -274,3 +274,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Neu: Zufällige Pause von `JOB_GAP_MIN`..`JOB_GAP_MAX` Sekunden zwischen zwei Jobs, damit yt-dlp-Starts nicht metronomisch sind (siehe 6.6).
 - Neu: Discovery-Intervall statt Cron: `DISCOVERY_INTERVAL_MIN`/`MAX` (Default 50/70 Minuten, zufällig pro Lauf); `DISCOVERY_CRON` wird nicht mehr ausgewertet (siehe 6.1).
 - Neu: Nachtlauf mit Jitter: `SYNC_JITTER` (Default 30 Minuten) verzögert den Sync-Slot zufällig, `sync.next` zeigt die echte Zeit (siehe 6.5).
+- Neu: Die Web-UI ist einsprachig Englisch (Buttons, Spalten-Header, Badges, Leerzustände, Dialoge, `en-US`-Formate) – vorher deutsch bei bereits englischem Backend; kein i18n-Gerüst (siehe 9).
