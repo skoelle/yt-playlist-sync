@@ -9,7 +9,7 @@ const state = {
   status: null,
   busy: false,
   log: { jobId: null, offset: 0, open: false, finished: false },
-  sort: { key: "date", dir: "desc" },
+  sort: { key: "title", dir: "asc" },
   syncSort: { key: "title", dir: "asc" },
   oneshots: [],
   syncs: [],
