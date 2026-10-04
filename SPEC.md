@@ -90,14 +90,15 @@ Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht in
 ## 6. Funktionale Anforderungen
 
 ### 6.1 Discovery (stündlich)
-1. Ping `HC_DISCOVERY_URL/start`.
-2. Liste holen: `yt-dlp --flat-playlist -J "https://www.youtube.com/<handle>/playlists"`.
-3. Pro Playlist `playlist_id`, `title`, optional `item_count`.
-4. Abgleich mit der DB:
+1. **Übersprungener Lauf:** Solange die Queue nicht leer ist (Jobs `queued` oder `running` – laufender Download, noch nicht abgearbeitete Jobs oder die 429-Pause), wird der automatische Lauf übersprungen: kein `runs`-Eintrag, Log-Meldung, Ping `HC_DISCOVERY_URL` success mit der Message `skipped: queue busy` (damit Healthchecks nicht „late" meldet). Der nächste Versuch ist der nächste Cron-Slot; nach einem Neustart mit requeued Jobs ebenso. Der manuelle Button (`POST /api/discovery/run`) überspringt **nicht**.
+2. Ping `HC_DISCOVERY_URL/start`.
+3. Liste holen: `yt-dlp --flat-playlist -J "https://www.youtube.com/<handle>/playlists"`.
+4. Pro Playlist `playlist_id`, `title`, optional `item_count`.
+5. Abgleich mit der DB:
    - **Neu:** anlegen, Typ bestimmen, Job sofort einreihen.
    - **Bekannt:** Titel und Zähler aktualisieren, Ordnername bleibt. Playlists im Status `new` (z. B. nach Dry-Run) werden erneut eingereiht.
    - **Verschwunden:** `remote_status = removed`, nichts löschen. Liefert YouTube eine leere Liste, obwohl Playlists bekannt sind, gilt der Lauf als Fehler.
-5. Ping Erfolg bzw. `/fail`.
+6. Ping Erfolg bzw. `/fail`.
 
 ### 6.2 Typbestimmung
 `oneshot`, wenn eines der Komma-getrennten `ONESHOT_KEYWORD`-Wörter case-insensitive in `title` steht, sonst `sync`. Der Typ wird einmalig beim ersten Erkennen festgelegt, in der UI per Button umstellbar. Eine spätere Änderung von `ONESHOT_KEYWORD` wirkt nur auf Playlists, die danach neu erkannt werden – bestehende behalten ihren Typ.
@@ -260,3 +261,4 @@ Single Page ohne Framework. `fetch` alle 5 Sekunden (nur bei sichtbarem Browser-
 - Neu: Playlist-Detailseite mit Cover, Video-Galerie und lokalem Player (`GET /videos`, `/thumb`, `/video`), Klick auf Hintergrund/ESC/Buttons schließt die Lichtbox.
 - Neu: Nächtliches SQLite-Backup um 0:30 nach `BACKUP_DIR` mit Rotation `BACKUP_KEEP` (siehe 6.9).
 - Neu: Das nächtliche Backup enthält zusätzlich die Download-Archive als `archives-*.tar.gz` (siehe 6.9).
+- Neu: Die stündliche Discovery wird übersprungen, solange die Queue nicht leer ist; der manuelle Button überspringt nicht (siehe 6.1).

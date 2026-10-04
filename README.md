@@ -94,6 +94,7 @@ only overwritten, nothing is deleted), start the container.
 - ✅ A oneshot counts as **done** when every video is in the yt-dlp archive or is permanently unavailable (private, deleted, age or members only). Otherwise it is **failed**; use *Retry* in the UI. Retries only fetch what is missing.
 - 🔁 *Full Re-Run* re-checks a finished oneshot against the archive and downloads whatever is missing. Existing files and archives are never deleted.
 - ⏸️ If YouTube answers with HTTP 429 or a bot check, the current job stops and the queue pauses for 30 minutes.
+- ⏭️ The hourly discovery is skipped while any download is queued or running (including a rate-limit pause) — it retries in the next hourly slot. The manual *Run discovery* button always runs.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
 
 ## 🛠️ Development

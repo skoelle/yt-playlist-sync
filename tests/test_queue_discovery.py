@@ -15,7 +15,8 @@ from app.config import Settings, ensure_dirs  # noqa: E402
 from app.db import init_engine, migrate, session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery, run_discovery  # noqa: E402
 from app.jobqueue import JobQueue  # noqa: E402
-from app.models import Job, Playlist  # noqa: E402
+from app.models import Job, Playlist, Run  # noqa: E402
+from app.scheduler import AppScheduler  # noqa: E402
 from app.ytdlp import PlaylistInfo  # noqa: E402
 
 
@@ -35,6 +36,60 @@ def playlists():
     with session_scope() as s:
         return {p.playlist_id: (p.type, p.state, p.remote_status, p.downloaded_count, p.folder_name)
                 for p in s.scalars(select(Playlist)).all()}
+
+
+def discovery_runs():
+    with session_scope() as s:
+        return [(r.status, r.message) for r in s.scalars(select(Run).where(Run.kind == "discovery"))]
+
+
+def record_pings(monkeypatch) -> list:
+    pings: list = []
+
+    async def fake_ping(url, kind="success", message=None):
+        pings.append((kind, message))
+
+    monkeypatch.setattr("app.scheduler.ping", fake_ping)
+    return pings
+
+
+def busy_queue(cfg) -> JobQueue:
+    apply_discovery([PlaylistInfo("PLx", "Setlist X")], "setlist")
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id))
+    queue = JobQueue(cfg)
+    assert queue.enqueue(pk, "nightly") is not None
+    assert queue.is_idle() is False
+    return queue
+
+
+def test_discovery_skipped_while_queue_busy(cfg, monkeypatch):
+    """Cron-Discovery überspringt, solange Jobs queued/running sind (SPEC 6.1)."""
+    pings = record_pings(monkeypatch)
+    queue = busy_queue(cfg)
+    asyncio.run(AppScheduler(cfg, queue).discovery_job())
+    assert pings == [("success", "skipped: queue busy")]
+    assert discovery_runs() == []
+
+
+def test_discovery_force_runs_while_busy(cfg, stub, monkeypatch):
+    """Der manuelle Button (force=True) läuft auch bei lauter Queue."""
+    pings = record_pings(monkeypatch)
+    queue = busy_queue(cfg)
+    asyncio.run(AppScheduler(cfg, queue).discovery_job(force=True))
+    assert [k for k, _ in pings] == ["start", "success"]
+    runs = discovery_runs()
+    assert len(runs) == 1 and runs[0][0] == "success"
+
+
+def test_discovery_runs_when_idle(cfg, stub, monkeypatch):
+    pings = record_pings(monkeypatch)
+    queue = JobQueue(cfg)
+    assert queue.is_idle() is True
+    asyncio.run(AppScheduler(cfg, queue).discovery_job())
+    assert [k for k, _ in pings] == ["start", "success"]
+    runs = discovery_runs()
+    assert len(runs) == 1 and runs[0][0] == "success"
 
 
 def test_apply_discovery_types_rename_and_removal(cfg):
