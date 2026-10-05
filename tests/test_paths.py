@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
-from app.paths import is_oneshot, sanitize_folder_name
+from app.paths import is_oneshot, sanitize_filename, sanitize_folder_name
 
 
 def test_is_oneshot_variants():
@@ -41,3 +41,21 @@ def test_sanitize_long_unicode_title():
 
 def test_sanitize_playlist_id():
     assert sanitize_folder_name("t", "a/b").endswith("[a_b]")
+
+
+def test_sanitize_filename_blocks_traversal():
+    name = sanitize_filename("../../etc/passwd")
+    assert "/" not in name and "\\" not in name and ".." not in name
+
+
+def test_sanitize_filename_special_chars_and_empty():
+    assert sanitize_filename('a:b*c?"d<e>f|g') == "a b c d e f g"
+    assert sanitize_filename("...") == "video"
+    assert sanitize_filename("") == "video"
+
+
+def test_sanitize_filename_keeps_brackets_and_truncates():
+    assert sanitize_filename("Live [2024] Set") == "Live [2024] Set"
+    name = sanitize_filename("\u00e4" * 300)
+    assert len(name.encode()) <= 150
+    name.encode("utf-8")
