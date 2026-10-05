@@ -167,9 +167,11 @@ DB- oder SPEC-Änderung. Die Darstellung/der DB-Import folgen in einem späteren
   Hostname, Token und Pfade nie committen.
 - **Laufort Container auf der NAS:** vorgesehene Ausführung ist
   `docker run … python -m app.ta_export` (README „Running the export inside the container"):
-  TA-Daten als `/ta:ro` und Export als `/export` lokal eingehängt, dadurch keine
-  doppelte Netzübertragung und Hardlinks möglich (auf der Arbeitsplatte über NFS greift
-  der Copy-Fallback). `--place-only` bewusst nicht gebaut.
+  TA-Daten als `/ta:ro` und Export als `/export` lokal eingehängt, dadurch keine doppelte
+  Netzübertragung. Hardlinks im Container sind **nicht** zuverlässig möglich (gemessen:
+  `EXDEV` bei zwei Mounts, `EPERM` bei einem Parent-Mount, obwohl beide `st_dev` gleich) –
+  `auto` fällt also auf Kopie zurück (doppelter Platz, einmalig). `--place-only` bewusst
+  nicht gebaut.
 
 Damit wird Phase 3 (Import-Trigger) vorerst zurückgestellt: sie wird erst dann wieder
 relevant, wenn das Legacy-Layout in der App dargestellt bzw. in die DB übernommen wird.

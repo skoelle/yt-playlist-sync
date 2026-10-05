@@ -42,5 +42,5 @@ services:
   #     TA_EXPORT_TARGET: /export
   #   volumes:
   #     - /srv/tubearchivist:/ta:ro   # TubeArchivist data (media/ + cache/), read-only
-  #     - /srv/export:/export         # export target, same filesystem for hardlinks
+  #     - /srv/export:/export         # export target (hardlink only if the filesystem allows it)
   #   command: ["python", "-m", "app.ta_export", "--dry-run"]
