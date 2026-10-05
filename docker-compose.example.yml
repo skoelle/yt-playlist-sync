@@ -27,3 +27,20 @@ services:
       - "8048:8048"
     labels:
       - com.centurylinklabs.watchtower.enable=true
+
+  # One-shot TubeArchivist export – see README, "Exporting from TubeArchivist".
+  # Start with: docker compose run --rm ta-export --dry-run
+  # ta-export:
+  #   image: ghcr.io/skoelle/yt-playlist-sync:latest
+  #   environment:
+  #     PUID: "1000"
+  #     PGID: "1000"
+  #     TA_API_URL: "http://<tubearchivist-host>:8770"
+  #     TA_API_HOST: "<allowed-host-header>"
+  #     TA_API_TOKEN: "<token>"
+  #     TA_MEDIA_ROOT: /ta
+  #     TA_EXPORT_TARGET: /export
+  #   volumes:
+  #     - /srv/tubearchivist:/ta:ro   # TubeArchivist data (media/ + cache/), read-only
+  #     - /srv/export:/export         # export target, same filesystem for hardlinks
+  #   command: ["python", "-m", "app.ta_export", "--dry-run"]

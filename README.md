@@ -102,6 +102,68 @@ only overwritten, nothing is deleted), start the container.
 - 🌙 The nightly sync does not start exactly on the second: it begins a random 0–30 minutes after `SYNC_CRON` (`SYNC_JITTER`), a different offset every day.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
 
+## 🗄️ Exporting from TubeArchivist
+
+An existing TubeArchivist library can be exported into the same folder layout this project
+downloads into (`<Playlist title> [<playlist id>]/NN - <Title> [<video id>].mp4`), so it can be
+archived, inspected or imported later without touching the app, its database or YouTube.
+
+```bash
+# values live in .env (gitignored): TA_API_URL, TA_API_TOKEN, TA_API_HOST,
+#                                   TA_EXPORT_TARGET, TA_MEDIA_ROOT
+.venv/bin/python -m app.ta_export --dry-run --metadata-only     # report only
+.venv/bin/python -m app.ta_export --metadata-only               # metadata, no videos
+.venv/bin/python -m app.ta_export                               # full copy
+.venv/bin/python -m app.ta_export --playlist PLxxxx --mode hardlink
+```
+
+| Option | Purpose |
+|---|---|
+| `--target` | export root (the folder the playlist directories are written to) |
+| `--media-root` | TubeArchivist data directory (contains `media/` and `cache/`) |
+| `--metadata-only` | write metadata, cover, archive and `manifest.json`, but no video files |
+| `--dry-run` | write nothing at all, only print the report |
+| `--mode auto\|copy\|hardlink` | default `auto`: try a hardlink and fall back to a copy when the filesystem refuses it (Synology NFS answers `Operation not permitted`); `hardlink` makes that a hard error |
+| `--playlist ID` | export a single playlist (repeatable) |
+| `--host-header` | `Host` header override; needed when TubeArchivist rejects the URL host |
+| `--no-archives` | skip the `archives/<playlist id>.txt` files |
+
+Each playlist folder gets a `manifest.json` (playlist id, title, item count, per video position,
+id, title, duration, publication date and file name) plus yt-dlp style `.info.json` sidecars, a
+`00 - <title> [<playlist id>].jpg` cover and `<target>/archives/<playlist id>.txt` with the
+`youtube <video id>` lines a later sync or import would need. The export never deletes or
+overwrites anything: reruns skip files that already exist, and entries whose media file is
+missing from the library are reported instead of archived. Files are written to a temporary
+`<name>.part` and renamed afterwards, so an interrupted run never leaves a truncated video
+under its final name; a rerun also compares sizes and rewrites files that are incomplete
+(counted as `rep`/`repaired` in the report).
+
+### Running the export inside the container
+
+The image ships `app/ta_export.py`, so a full export can run where the library lives instead
+of streaming it over the network twice. Mount the TubeArchivist folder read-only and the
+export folder read-write; because both then sit on the same filesystem, `--mode auto` can
+hardlink the videos (report column `link`) instead of copying them. The entrypoint runs the
+command as `PUID`/`PGID`, so the exported files are never owned by root.
+
+```bash
+docker run --rm \
+  -e PUID=1000 -e PGID=1000 \
+  -e TA_API_URL=http://<tubearchivist-host>:8770 \
+  -e TA_API_HOST=<allowed-host-header> \
+  -e TA_API_TOKEN=<token> \
+  -e TA_MEDIA_ROOT=/ta \
+  -e TA_EXPORT_TARGET=/export \
+  -v /path/to/tubearchivist:/ta:ro \
+  -v /path/to/export:/export \
+  ghcr.io/skoelle/yt-playlist-sync:latest \
+  python -m app.ta_export --dry-run
+```
+
+Run it with `--dry-run` first (report only), then `--metadata-only` and finally without
+flags for the videos. There is no `.env` inside the image, so every value is passed with
+`-e` (or point `--env-file` at a mounted file).
+
 ## 🛠️ Development
 
 ```bash
@@ -129,6 +191,7 @@ app/
 ├── jobqueue.py, runner.py   Single-worker queue and the yt-dlp subprocess runner
 ├── ytdlp.py, discovery.py   yt-dlp command builder/parsers, playlist discovery
 ├── healthchecks.py, paths.py  Ping helper, folder-name sanitising
+├── ta_export.py               Standalone TubeArchivist export (python -m app.ta_export)
 └── static/                  index.html, app.js, style.css (vanilla, no build step)
 migrations/                  Alembic schema migrations
 tests/                       pytest suite; fixtures/fake_ytdlp.py is the network-free stub

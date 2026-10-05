@@ -21,6 +21,19 @@ def sanitize_folder_name(title: str, playlist_id: str, max_bytes: int = 150) -> 
     return f"{name} [{safe_id}]"
 
 
+def sanitize_filename(title: str, max_bytes: int = 150) -> str:
+    """Build a safe file stem (no folder rules, no playlist-id suffix)."""
+    name = _BAD_CHARS.sub(" ", title or "")
+    name = name.replace("..", " ")
+    name = re.sub(r"\s+", " ", name).strip(" .")
+    if not name:
+        name = "video"
+    encoded = name.encode("utf-8")
+    if len(encoded) > max_bytes:
+        name = encoded[:max_bytes].decode("utf-8", errors="ignore").rstrip(" .")
+    return name or "video"
+
+
 def is_oneshot(title: str, keyword: str) -> bool:
     """True if any comma-separated keyword appears in the title (case-insensitive)."""
     title_l = (title or "").lower()
