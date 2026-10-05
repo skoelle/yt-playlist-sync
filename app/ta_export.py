@@ -11,6 +11,7 @@ needs. Never deletes, never overwrites, idempotent on rerun.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import logging
 import os
@@ -337,14 +338,27 @@ def _safe_id(playlist_id: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in playlist_id) or "unknown"
 
 
-def _place_file(src: Path, dst: Path, mode: str, dry_run: bool) -> tuple[int, str]:
+def _same_device(src: Path, dst_dir: Path) -> bool:
+    """True when ``src`` and ``dst_dir`` share a filesystem, so hardlinking can work.
+
+    Unknown (a stat that fails) counts as True: the real ``os.link`` decides then.
+    """
+    try:
+        return src.stat().st_dev == dst_dir.stat().st_dev
+    except OSError:
+        return True
+
+
+def _place_file(src: Path, dst: Path, mode: str, dry_run: bool,
+                linkable: bool | None = None) -> tuple[int, str]:
     """Create ``dst`` from ``src`` atomically (hardlink or copy).
 
     Returns ``(bytes transferred, action)`` with action ``skip`` (identical file
     already present), ``link``, ``copy`` or ``repair`` (a partial or truncated
     file was replaced by the complete one). The data goes to ``<name>.part``
     first, so an interrupted run can never leave a broken file under the final
-    name.
+    name. ``linkable`` short-circuits the hardlink attempt when source and
+    target are known to live on different filesystems.
     """
     size = src.stat().st_size
     try:
@@ -362,13 +376,18 @@ def _place_file(src: Path, dst: Path, mode: str, dry_run: bool) -> tuple[int, st
         tmp.unlink()
     linked = False
     if mode in {"auto", "hardlink"}:
-        try:
-            os.link(src, tmp)
-            linked = True
-        except OSError as exc:
-            if mode == "hardlink":
-                raise
-            log.warning("hardlink not possible for %s (%s), copying instead", dst.name, exc)
+        if linkable is None:
+            linkable = _same_device(src, dst.parent)
+        if linkable:
+            try:
+                os.link(src, tmp)
+                linked = True
+            except OSError as exc:
+                if mode == "hardlink":
+                    raise
+                log.warning("hardlink not possible for %s (%s), copying instead", dst.name, exc)
+        elif mode == "hardlink":
+            raise OSError(errno.EXDEV, "source and target are on different filesystems")
     if not linked:
         shutil.copy2(src, tmp)
     os.replace(tmp, dst)
@@ -432,6 +451,7 @@ def _export_entry(
     metadata_only: bool,
     dry_run: bool,
     report: PlaylistReport,
+    linkable: bool | None = None,
 ) -> dict[str, Any]:
     """Write video and sidecars for one entry; returns the manifest row."""
     src = media.get(entry.video_id)
@@ -447,7 +467,7 @@ def _export_entry(
         report.skipped += 1
     else:
         try:
-            size, action = _place_file(src, dest / file_name, mode, dry_run)
+            size, action = _place_file(src, dest / file_name, mode, dry_run, linkable)
             report.bytes_copied += size
             if action == "skip":
                 report.skipped += 1
@@ -537,6 +557,7 @@ def export(
             log.warning("playlist not found in TubeArchivist: %s", pid)
 
     report = ExportReport(dry_run=dry_run, metadata_only=metadata_only)
+    device_warned = False
     for playlist in playlists:
         prow = PlaylistReport(playlist_id=playlist.playlist_id, title=playlist.title)
         prow.total = len(playlist.entries)
@@ -544,6 +565,16 @@ def export(
         dest = target / prow.folder
         if not dry_run:
             dest.mkdir(parents=True, exist_ok=True)
+        linkable: bool | None = None
+        if not dry_run and mode in {"auto", "hardlink"}:
+            linkable = _same_device(media_root, dest)
+            if not linkable and not device_warned:
+                log.warning(
+                    "source %s and target %s are on different filesystems: "
+                    "hardlinks are impossible, copying instead",
+                    media_root, target,
+                )
+                device_warned = True
         if progress:
             progress(f"{prow.folder}: {prow.total} entries")
 
@@ -553,7 +584,7 @@ def export(
             meta = videos.get(entry.video_id)
             row = _export_entry(
                 playlist, entry, meta, media, media_root, dest, entry.idx + 1, mode,
-                metadata_only, dry_run, prow,
+                metadata_only, dry_run, prow, linkable,
             )
             rows.append(row)
             if row["file"]:

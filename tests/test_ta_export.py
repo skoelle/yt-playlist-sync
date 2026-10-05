@@ -3,6 +3,7 @@
 """Tests for the TubeArchivist export (MockTransport only, never the real network)."""
 from __future__ import annotations
 
+import errno
 import json
 import os
 from pathlib import Path
@@ -298,6 +299,43 @@ def test_export_hardlink_mode_propagates_error(tmp_path, monkeypatch):
     report = ta.export(make_client(), media_root=root, target=tmp_path / "out", mode="hardlink")
     assert report.totals()["failed"] == 2
     assert report.totals()["hardlinked"] == 0
+
+
+def test_export_warns_once_on_cross_device(tmp_path, monkeypatch, caplog):
+    root = make_tree(tmp_path)
+    playlists = [playlist_payload("PL1", "One"), playlist_payload("PL2", "Two")]
+    link_attempts = []
+
+    def refuse(*_args, **_kwargs):
+        link_attempts.append(1)
+        raise AssertionError("os.link must not run across filesystems")
+
+    monkeypatch.setattr(ta.os, "link", refuse)
+    monkeypatch.setattr(ta, "_same_device", lambda _src, _dst: False)
+    with caplog.at_level("WARNING"):
+        report = ta.export(
+            make_client(playlists=playlists), media_root=root, target=tmp_path / "out"
+        )
+    totals = report.totals()
+    assert totals["copied"] == 4 and totals["failed"] == 0
+    assert link_attempts == []
+    assert sum("different filesystems" in r.message for r in caplog.records) == 1
+    first = tmp_path / "out" / "One [PL1]" / "01 - Title of vid1 [vid1].mp4"
+    assert first.read_bytes() == MEDIA_BYTES
+
+
+def test_place_file_hardlink_fails_across_devices(tmp_path):
+    src = tmp_path / "src.mp4"
+    src.write_bytes(MEDIA_BYTES)
+    dst = tmp_path / "out" / "dst.mp4"
+    with pytest.raises(OSError) as excinfo:
+        ta._place_file(src, dst, "hardlink", False, linkable=False)
+    assert excinfo.value.errno == errno.EXDEV
+    assert not dst.exists()
+
+
+def test_same_device_is_true_for_same_filesystem(tmp_path):
+    assert ta._same_device(tmp_path, tmp_path) is True
 
 
 def test_export_repairs_truncated_file(tmp_path):

@@ -142,9 +142,10 @@ under its final name; a rerun also compares sizes and rewrites files that are in
 
 The image ships `app/ta_export.py`, so a full export can run where the library lives instead
 of streaming it over the network twice. Mount the TubeArchivist folder read-only and the
-export folder read-write; because both then sit on the same filesystem, `--mode auto` can
-hardlink the videos (report column `link`) instead of copying them. The entrypoint runs the
-command as `PUID`/`PGID`, so the exported files are never owned by root.
+export folder read-write. `--mode auto` first tries to hardlink (report column `link`), but
+inside a container the two bind mounts often behave like separate filesystems, so it falls
+back to copying (report column `copy`) – that works, it just uses the space twice. The
+entrypoint runs the command as `PUID`/`PGID`, so the exported files are never owned by root.
 
 ```bash
 docker run --rm \
