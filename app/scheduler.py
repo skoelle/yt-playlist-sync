@@ -104,7 +104,7 @@ class AppScheduler:
         await ping(url, "start")
         try:
             stats = await run_discovery(self.settings, self.queue)
-            await ping(url, "success", f"new={stats.new} updated={stats.updated} removed={stats.removed}")
+            await ping(url, "success", f"new={stats.new} updated={stats.updated}")
         except Exception as exc:  # noqa: BLE001
             log.error("discovery failed: %s", exc)
             await ping(url, "fail", str(exc))

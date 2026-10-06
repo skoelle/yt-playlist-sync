@@ -183,3 +183,31 @@ def test_read_video_entries(tmp_path):
     # missing folder
     out = ytdlp.read_video_entries(tmp_path / "nope", "PL1")
     assert out["exists"] is False and out["videos"] == [] and out["cover"] is None
+
+
+def test_is_gone():
+    assert ytdlp.is_gone("Could not list playlist: ERROR: [youtube:playlist] PL1: "
+                         "The playlist does not exist")
+    assert ytdlp.is_gone("ERROR: [youtube:playlist] PL1: This playlist is private")
+    assert ytdlp.is_gone("ERROR: [youtube:playlist] PL1: The playlist has been removed")
+    assert ytdlp.is_gone("ERROR: [youtube:playlist] PL1: Resource not found")
+    assert ytdlp.is_gone("HTTP Error 404: Not Found")
+    # transient or unrelated errors must never count as gone
+    assert not ytdlp.is_gone("HTTP Error 403: Forbidden")
+    assert not ytdlp.is_gone("HTTP Error 429: Too Many Requests")
+    assert not ytdlp.is_gone("Sign in to confirm your age")
+    assert not ytdlp.is_gone("yt-dlp timed out after 60s")
+    assert not ytdlp.is_gone("empty output")
+
+
+def test_append_archive_is_additive(tmp_path):
+    p = tmp_path / "archives" / "PL1.txt"
+    assert ytdlp.append_archive(p, ["vidA", "vidB"], dry_run=False) == 2
+    assert p.read_text() == "youtube vidA\nyoutube vidB\n"
+    # existing lines are never touched, known ids are not repeated
+    assert ytdlp.append_archive(p, ["vidB", "vidC"], dry_run=False) == 1
+    assert p.read_text() == "youtube vidA\nyoutube vidB\nyoutube vidC\n"
+    # dry-run counts but writes nothing
+    assert ytdlp.append_archive(p, ["vidD"], dry_run=True) == 1
+    assert p.read_text().count("vidD") == 0
+    assert ytdlp.read_archive(p) == {"vidA", "vidB", "vidC"}

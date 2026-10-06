@@ -99,8 +99,8 @@ Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht in
 4. Pro Playlist `playlist_id`, `title`, optional `item_count`.
 5. Abgleich mit der DB:
    - **Neu:** anlegen, Typ bestimmen, Job sofort einreihen.
-   - **Bekannt:** Titel und Zähler aktualisieren, Ordnername bleibt. Playlists im Status `new` (z. B. nach Dry-Run) werden erneut eingereiht.
-   - **Verschwunden:** `remote_status = removed`, nichts löschen. Liefert YouTube eine leere Liste, obwohl Playlists bekannt sind, gilt der Lauf als Fehler.
+   - **Bekannt:** Titel und Zähler aktualisieren, Ordnername bleibt. Taucht die Playlist im Listing auf, wird `remote_status` wieder `active` (der Typ bleibt, was er ist). Playlists im Status `new` (z. B. nach Dry-Run) werden erneut eingereiht.
+   - **Nicht in der Liste:** nichts ändern. Die Playlist behält Typ und `remote_status`, also bleiben „nicht gelistete" Playlists (z. B. unlisted, manuell angelegt, aus einem Import) ruhig `sync` und werden weiter nachts geprüft. Ob eine Playlist wirklich weg ist, entscheidet ausschließlich ein Sync-Lauf (siehe 6.3). Liefert YouTube eine leere Liste, obwohl Playlists bekannt sind, gilt der Lauf als Fehler.
 6. Ping Erfolg bzw. `/fail`.
 
 ### 6.2 Typbestimmung
@@ -129,6 +129,12 @@ yt-dlp \
 - Ordnername: Playlist-Titel (bereinigt) plus `[playlist_id]`, beim ersten Download in `folder_name` gespeichert.
 - `DRY_RUN=1` hängt `--simulate` an: keine Dateien, keine Archive-Einträge.
 - Job-Logs: `/config/logs/<job_id>.log`.
+
+**Existenzprüfung beim Listing:** Jeder Job listet die Playlist vor dem Download (`list_playlist_entries`) und prüft dabei, ob sie noch existiert (`ytdlp.is_gone`):
+
+- **Bestätigt weg** (Meldung „playlist does not exist", privat, 404): `remote_status = removed`, Typ `sync → oneshot`, State `failed`. Dateien, Zähler und `playlist_entries` bleiben unangetastet; ein manueller Retry ist weiterhin möglich (die Queue blockt Auto-Trigger für `removed`, nicht manuelle).
+- **Wieder da** (das Listing klappt erneut, oder die Playlist taucht wieder im Channel-Listing auf): nur `remote_status` wird wieder `active`. Der Typ bleibt `oneshot` – ein stiller Rückweg zu nächtlichem Sync gibt es bewusst nicht (Type-Toggle in der UI).
+- **Kein Beweis:** HTTP 403, HTTP 429, Netzwerkfehler und Altersprüfungen setzen `removed` **nicht**; die Playlist bleibt `sync`/`active` und wird erneut versucht.
 
 ### 6.4 Oneshot-Logik
 - Erster Lauf lädt komplett.
@@ -279,3 +285,6 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - Neu: Nachtlauf mit Jitter: `SYNC_JITTER` (Default 30 Minuten) verzögert den Sync-Slot zufällig, `sync.next` zeigt die echte Zeit (siehe 6.5).
 - Neu: Die Web-UI ist einsprachig Englisch (Buttons, Spalten-Header, Badges, Leerzustände, Dialoge, `en-US`-Formate) – vorher deutsch bei bereits englischem Backend; kein i18n-Gerüst (siehe 9).
 - Neu: Platzhalter für fehlende Videos in der Videogalerie – Listing-Snapshot je Playlist in `playlist_entries` (Migration `0002`, beim Finalisieren jedes Jobs aktualisiert), `GET /videos` liefert Platzhalter-Zeilen mit Status und Grund, UI zeigt sie mit gebrochenem Video-Symbol (siehe 7, 8, 9).
+- Neu: TubeArchivist-Export als Standalone-Skript `python -m app.ta_export` (Ordnerlayout wie yt-dlp, `manifest.json`, Download-Archive, `auto|copy|hardlink`) – siehe README und `IMPORT-FEATURE.md`.
+- Neu: Offline-Import `python -m app.ta_import` liest `manifest.json`-Ordner und schreibt Playlists, `playlist_entries` und Download-Archive (append-only, nie löschend); alle importierten Playlists werden `oneshot` (siehe README).
+- Geändert: Discovery markiert nichts mehr als `removed` („nicht gelistet" bleibt sync); `removed` entsteht nur noch, wenn ein Sync-Lauf bestätigt, dass die Playlist weg ist – dann auch Typ `sync → oneshot`, bei Wiederkehr nur `remote_status` zurück auf `active` (siehe 6.1, 6.3).

@@ -101,6 +101,7 @@ only overwritten, nothing is deleted), start the container.
 - ⏭️ Discovery runs every 50–70 minutes on average (`DISCOVERY_INTERVAL_MIN`/`MAX`, each run picks a new random delay) and is skipped while any download is queued or running (including a rate-limit pause) — it retries at the next planned run. The manual *Run discovery* button always runs.
 - 🌙 The nightly sync does not start exactly on the second: it begins a random 0–30 minutes after `SYNC_CRON` (`SYNC_JITTER`), a different offset every day.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
+- ❓ Discovery never marks a playlist as *removed*: a playlist that is missing from the channel listing (unlisted, manually added, imported) keeps its type and keeps syncing. Only a sync run can confirm that a playlist is gone – then it becomes `removed` and switches from *sync* to *oneshot* (HTTP 403/429, network or age errors never do that). When it reappears, only the status returns to *active*, the type stays *oneshot*.
 
 ## 🗄️ Exporting from TubeArchivist
 
@@ -165,6 +166,50 @@ Run it with `--dry-run` first (report only), then `--metadata-only` and finally 
 flags for the videos. There is no `.env` inside the image, so every value is passed with
 `-e` (or point `--env-file` at a mounted file).
 
+## 📥 Importing the exported tree
+
+The export is only a folder tree until the app knows about it. `app.ta_import.py` reads the
+`manifest.json` files and writes playlists, video entries and download archives into the app
+database – offline, without YouTube and without the TubeArchivist API. **Stop the app first**
+(the importer needs exclusive database access), then move the playlist folders into the data
+directory and run:
+
+```bash
+# 1. preview while the folders are still in the export root
+docker run --rm -e PUID=1000 -e PGID=1000 \
+  -v /path/to/export:/export:ro -v /path/to/data:/data -v /path/to/config:/config \
+  ghcr.io/skoelle/yt-playlist-sync:latest \
+  python -m app.ta_import --source /export --dry-run
+
+# 2. folders are in /data now: plain run (default source = data dir)
+... python -m app.ta_import
+```
+
+| Option | Purpose |
+|---|---|
+| `--source` | root that is scanned for `<folder>/manifest.json` (default: data directory) |
+| `--playlist ID` | import only this playlist (repeatable; wins over `--skip`) |
+| `--skip ID` | leave out this playlist (repeatable) |
+| `--no-archives` | do not append local files to `config/archives/<id>.txt` |
+| `--dry-run` | report only; no playlist, entry or archive is written |
+
+Rules the importer follows:
+
+- Every imported playlist becomes **oneshot** (frozen – the nightly sync never picks it up;
+  switch the type back in the UI if you want it synced).
+- **Local files decide**: `done` only when every manifest entry has a file on disk, otherwise
+  `idle`, so missing videos can be downloaded later with *Retry*/*Full Re-Run*.
+- Entries are upserted, never removed. `reason`/`unavailable` from earlier YouTube runs are
+  never overwritten; rows that are not in the manifest stay untouched.
+- Every local video file gets an append-only `youtube <id>` line in
+  `config/archives/<id>.txt` – no need to copy the export's `archives/` folder, and reruns
+  are idempotent (`manifest.json` stays in the playlist folder as the marker).
+- Nothing is ever moved, renamed or deleted; the importer only writes database rows and
+  appends archive lines.
+
+If a playlist no longer exists on YouTube, it shows up as *removed* + *oneshot* only after you
+run it once manually (see the sync rule above); until then it simply sits in the oneshot tab.
+
 ## 🛠️ Development
 
 ```bash
@@ -193,6 +238,7 @@ app/
 ├── ytdlp.py, discovery.py   yt-dlp command builder/parsers, playlist discovery
 ├── healthchecks.py, paths.py  Ping helper, folder-name sanitising
 ├── ta_export.py               Standalone TubeArchivist export (python -m app.ta_export)
+├── ta_import.py               Offline import of an exported tree into the database (python -m app.ta_import)
 └── static/                  index.html, app.js, style.css (vanilla, no build step)
 migrations/                  Alembic schema migrations
 tests/                       pytest suite; fixtures/fake_ytdlp.py is the network-free stub

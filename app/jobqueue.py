@@ -322,6 +322,19 @@ class JobQueue:
             if dry:
                 pl.state = "new"
                 return
+            if r.gone:
+                # yt-dlp confirmed the playlist itself is gone (deleted, private, 404).
+                # Local files, entries and counts stay untouched - only the sync status
+                # changes: no more nightly sync, the retry button stays available.
+                pl.remote_status = "removed"
+                if playlist_type == "sync":
+                    pl.type = "oneshot"
+                pl.state = "failed"
+                return
+            if r.entries and pl.remote_status == "removed":
+                # The listing worked again, so the playlist exists (it may just not be
+                # listed by the channel). Back to active; the type is never restored here.
+                pl.remote_status = "active"
             pl.downloaded_count = r.archived
             pl.skipped_count = r.skipped
             pl.failed_count = r.failed

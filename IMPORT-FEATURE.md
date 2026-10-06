@@ -122,7 +122,9 @@ Projektregeln, die gelten (AGENTS.md / SPEC):
 - Stub `tests/fixtures/fake_ytdlp.py`: `--flat-playlist` auf einer Playlist-URL liest
   `data["playlists"][pid]` → **unbekannte ID wirft `KeyError`**. Für den 400-Pfad von
   `POST /playlists` muss der Stub bei unbekannter ID sauber `exit 1` + stderr-Text
-  machen (sonst bleibt das untestbar).
+  machen (sonst bleibt das untestbar). Umsetzung (erledigt): `data["listing_error"]`
+  (Map `pid → Fehlertext`) lässt das Listing absichtlich scheitern – damit werden die
+  Gone-Meldung („The playlist does not exist") und der 403-Gegenfall getestet.
 - Queue-Tests-Muster (`tests/test_queue_discovery.py:154`):
   `asyncio.run` mit `queue.start()` → `queue.wait_for_jobs([jid], poll=0.2)` → `queue.stop()`.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))`, DB-Init über
@@ -175,6 +177,43 @@ DB- oder SPEC-Änderung. Die Darstellung/der DB-Import folgen in einem späteren
 
 Damit wird Phase 3 (Import-Trigger) vorerst zurückgestellt: sie wird erst dann wieder
 relevant, wenn das Legacy-Layout in der App dargestellt bzw. in die DB übernommen wird.
+
+---
+
+## 3b. DB-Import (umgesetzt): Offline-CLI `ta_import`
+
+**Stand 2026-10-06.** Der Schritt „Exportierte Bäume in die App-DB übernehmen" ist als
+eigenständiges Skript umgesetzt – bewusst **nicht** als Queue-Trigger (Phase 3) und ohne
+Änderung an Schema, API oder UI.
+
+- **Aufruf:** `python -m app.ta_import` (`app/ta_import.py`), App vorher stoppen
+  (exklusiver DB-Zugriff). Flags: `--source` (Default `DATA_DIR`), `--playlist`
+  (Allow-Liste, gewinnt über `--skip`), `--skip`, `--no-archives`, `--dry-run`.
+- **Regeln:** alle Importe werden `oneshot`+`active`; `state` ist `done`, wenn jede
+  Manifest-Eintragung eine lokale Datei hat, sonst `idle` (fehlende Videos bleiben
+  über Retry ladbar); `folder_name` = tatsächlicher Ordner auf der Platte (DB-Name
+  gewinnt, wenn dieser Ordner existiert); `playlist_entries` werden geupsertet (Position,
+  Titel, Dauer, `remote_present=True`), `reason`/`unavailable` und nicht gelistete Zeilen
+  bleiben unangetastet, Zeilen werden nie entfernt.
+- **Archive:** `append_archive` liegt jetzt in `ytdlp.py` (Export und Import teilen es);
+  der Import hängt pro lokaler Videodatei `youtube <id>` an `config/archives/<pid>.txt`
+  an. Die `<export>/archives/`-Dateien müssen **nicht** umgekopiert werden (lokale Dateien
+  sind die Wahrheit), `--no-archives` schaltet das ab. Quelldateien werden nie geöffnet
+  geschrieben.
+- **Auswahl/Report** analog `ta_export` (Tabelle, Warnungen, Exit 1 bei Fehlern,
+  Exit 2 bei fehlender Quelle/DB).
+- **Tests:** `tests/test_ta_import.py` (10), DB-Init über `init_engine`/`migrate` mit
+  `tmp_path`, kein Netzwerk.
+
+**Gleichzeitig geändert (Gone-Regel, siehe SPEC 6.1/6.3):** Discovery markiert nichts
+mehr als `removed` – nicht gelistete (z. B. importierte, gelöschte, unlisted) Playlists
+bleiben in ihrem Typ und Status. `removed` + `sync→oneshot` entsteht **nur** noch, wenn
+ein Sync-Lauf beim Listing bestätigt, dass die Playlist weg ist (gelöscht, privat, 404;
+`ytdlp.is_gone`); 403/429/Netzwerk/Alter zählen nicht. Bei einem späteren Erfolg wird
+nur `remote_status` wieder `active`, der Typ bleibt `oneshot`. Damit entfällt der in
+Phase 2 geplante `manual`-Guard gegen das Entfernen manueller Playlists (die Frage
+stellte sich schon vorher nicht mehr), die Phase selbst (manuelles Eintragen per Formular)
+bleibt unverändert geplant.
 
 ---
 
@@ -236,18 +275,11 @@ Jede Phase ist eigenständig abschließbar und muss `ruff` + `pytest` grün hint
 - [ ] **`app/ytdlp.py`** – `playlist_id_from_url(url: str) -> str | None`
   - akzeptiert `https://www.youtube.com/playlist?list=PL…`, `&list=` in beliebigen
     YouTube-URLs und eine bare Playlist-ID; sonst `None`.
-- [ ] **`app/discovery.py:62`** – einzeiliger Guard, sonst nichts an der Logik:
-  ```python
-  for pid, pl in existing.items():
-      if pl.manual:            # manuelle Zeilen nie als "removed" markieren
-          continue
-      if pid not in seen and pl.remote_status != "removed":
-          pl.remote_status = "removed"
-          stats.removed += 1
-  ```
-  Titel-/Count-Refresh im oberen Teil bleibt aktiv (falls die Playlist doch im Kanal
-  auftaucht). Damit bleibt `remote_status == "active"` und `sync_job` (`app/scheduler.py:120`)
-  arbeitet manuelle Sync-Playlists normal ab.
+- [x] **`app/discovery.py`** – entfallen (erledigt durch die Gone-Regel, siehe 3b):
+  `apply_discovery` markiert **nichts** mehr als `removed`, es gibt also keinen Guard
+  gegen das Entfernen manueller Zeilen mehr – `remote_status == "active"` bleibt, solange
+  kein Sync-Lauf bestätigt, dass die Playlist weg ist. Titel-/Count-Refresh im oberen
+  Teil bleibt aktiv (falls die Playlist doch im Kanal auftaucht).
 - [ ] **`app/api.py`**
   - `playlist_dict()` → zusätzlich `"manual": pl.manual`
   - **neu `POST /api/playlists`**, Single Purpose, **kein Auto-Enqueue**
@@ -293,8 +325,8 @@ Jede Phase ist eigenständig abschließbar und muss `ruff` + `pytest` grün hint
   - Duplikat → 409 · ungültige URL → 422 · falscher `type` → 422
   - Stub-Fehler (unbekannte Playlist-ID) → 400
   - **`test_manual_playlist_survives_discovery`**: manuelle Zeile anlegen,
-    `apply_discovery([...ohne diese ID...])` → `remote_status` bleibt `"active"`,
-    `stats.removed == 0`
+    `apply_discovery([...ohne diese ID...])` → `remote_status` bleibt `"active"`
+    (Discovery markiert ohnehin nichts mehr als entfernt)
   - `POST /{pid}/import` ohne konfigurierte Quellen → 400
   - `test_ui_is_english` weiter grün
 

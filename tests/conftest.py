@@ -20,6 +20,7 @@ DEFAULT_DATA = {
         "PLbbb": [{"id": "vid00000011", "title": "Song A"}, {"id": "vid00000012", "title": "Song B"}],
     },
     "fail": {},
+    "listing_error": {},
     "slow": 0,
 }
 
