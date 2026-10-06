@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
-"""yt-dlp integration: URLs, command building, output parsing, evaluation."""
+"""yt-dlp integration: URLs, command building, output parsing, evaluation, download archives."""
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +18,7 @@ PROGRESS_TEMPLATE = (
     f"download:{PROGRESS_PREFIX}|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"
 )
 UNAVAILABLE_TITLES = {"[private video]", "[deleted video]"}
+ARCHIVE_NAME = "youtube"
 
 _PROGRESS = re.compile(rf"^{PROGRESS_PREFIX}\|\s*([\d.]+)%\|(.*?)\|(.*)$")
 _ITEM = re.compile(r"^\[download\] Downloading item (\d+) of (\d+)")
@@ -30,6 +31,14 @@ _PERMANENT = re.compile(
     r"Video unavailable|Private video|video is private|has been removed|no longer available|"
     r"account .* terminated|members-only|Join this channel|confirm your age|age-restricted|"
     r"not available in your country|blocked it|copyright|This video is not available",
+    re.I,
+)
+# Playlist-level verdicts: a playlist that no longer exists or is not accessible to us.
+# Deliberately narrow - anything else (network, 429, age checks) must not count as gone.
+_GONE = re.compile(
+    r"playlist does not exist|this playlist is private|the playlist is private|"
+    r"playlist is private|playlist (?:has been|was) removed|playlist unavailable|"
+    r"this playlist is unavailable|resource not found|HTTP Error 404",
     re.I,
 )
 
@@ -254,6 +263,11 @@ def is_forbidden(text: str) -> bool:
     return bool(_FORBIDDEN.search(text))
 
 
+def is_gone(text: str) -> bool:
+    """True when yt-dlp says the playlist itself is gone (deleted, private or 404)."""
+    return bool(_GONE.search(text))
+
+
 def read_archive(path: Path | str) -> set[str]:
     p = Path(path)
     if not p.exists():
@@ -264,6 +278,19 @@ def read_archive(path: Path | str) -> set[str]:
         if len(parts) >= 2:
             ids.add(parts[-1])
     return ids
+
+
+def append_archive(path: Path | str, ids: list[str], dry_run: bool) -> int:
+    """Append missing ``youtube <id>`` lines; existing lines are never touched."""
+    path = Path(path)
+    existing = read_archive(path)
+    fresh = [v for v in ids if v not in existing]
+    if fresh and not dry_run:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            for vid in fresh:
+                fh.write(f"{ARCHIVE_NAME} {vid}\n")
+    return len(fresh)
 
 
 def evaluate(
@@ -298,7 +325,7 @@ def folder_size(path: Path | str) -> int:
 
 _STEM = re.compile(r"^(\d+) - (.+) \[([^\][]+)\]$")
 _THUMB_EXTS = (".jpg", ".jpeg", ".png", ".webp")
-_VIDEO_EXTS = {".mkv", ".mp4"}
+_VIDEO_EXTS = {".mkv", ".mp4", ".webm"}
 _SIDECARS = (".jpg", ".jpeg", ".png", ".webp", ".info.json", ".description")
 
 # info.json files are ~100 KB each; cache parsed results keyed by (mtime_ns, size).

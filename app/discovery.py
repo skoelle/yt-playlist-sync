@@ -24,15 +24,17 @@ _lock = asyncio.Lock()
 class DiscoveryStats:
     new: int = 0
     updated: int = 0
-    removed: int = 0
     to_enqueue: list[int] = field(default_factory=list)
 
 
 def apply_discovery(infos: list[ytdlp.PlaylistInfo], keyword: str) -> DiscoveryStats:
-    """Reconcile the playlist table with the discovered list. Never deletes anything."""
+    """Reconcile the playlist table with the discovered list. Never deletes anything.
+
+    Playlists that are not in the list stay untouched (unlisted playlists keep
+    syncing); only a sync run can confirm that a playlist is gone (SPEC 6.1).
+    """
     stats = DiscoveryStats()
     now = utcnow()
-    seen = {i.id for i in infos}
     with session_scope() as s:
         existing = {p.playlist_id: p for p in s.scalars(select(Playlist)).all()}
         for info in infos:
@@ -58,10 +60,6 @@ def apply_discovery(infos: list[ytdlp.PlaylistInfo], keyword: str) -> DiscoveryS
                 pl.remote_item_count = info.item_count
             if pl.state == "new" and not pl.ignored:
                 stats.to_enqueue.append(pl.id)
-        for pid, pl in existing.items():
-            if pid not in seen and pl.remote_status != "removed":
-                pl.remote_status = "removed"
-                stats.removed += 1
     return stats
 
 
@@ -92,13 +90,13 @@ async def run_discovery(settings: Settings, queue: JobQueue) -> DiscoveryStats:
                 with session_scope() as s:
                     known = s.scalar(select(Playlist.id).limit(1))
                 if known is not None:
-                    raise ytdlp.YtDlpError("Channel returned no playlists, refusing to mark all as removed")
+                    raise ytdlp.YtDlpError("Channel returned no playlists, refusing the listing")
             stats = apply_discovery(infos, settings.oneshot_keyword)
             for pk in stats.to_enqueue:
                 queue.enqueue(pk, "discovery")
             finish_run(
                 run_id, "success",
-                f"{len(infos)} playlists, {stats.new} new, {stats.updated} updated, {stats.removed} removed",
+                f"{len(infos)} playlists, {stats.new} new, {stats.updated} updated",
             )
             return stats
         except Exception as exc:

@@ -33,6 +33,7 @@ class RunResult:
     cancelled: bool = False
     rate_limited: bool = False
     forbidden: bool = False
+    gone: bool = False
     exit_code: int | None = None
     total: int = 0
     archived: int = 0
@@ -98,6 +99,8 @@ async def run_playlist(
             result.error_summary = f"Could not list playlist: {str(exc)[:300]}"
             if ytdlp.is_forbidden(str(exc)):
                 result.forbidden = True
+            elif ytdlp.is_gone(str(exc)):
+                result.gone = True
             return result
         result.entries = entries
 

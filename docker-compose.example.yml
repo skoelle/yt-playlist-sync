@@ -44,3 +44,17 @@ services:
   #     - /srv/tubearchivist:/ta:ro   # TubeArchivist data (media/ + cache/), read-only
   #     - /srv/export:/export         # export target (hardlink only if the filesystem allows it)
   #   command: ["python", "-m", "app.ta_export", "--dry-run"]
+
+  # One-shot import of an exported tree (stop the main service first) – see README,
+  # "Importing the exported tree".
+  # Start with: docker compose run --rm ta-import --dry-run
+  # ta-import:
+  #   image: ghcr.io/skoelle/yt-playlist-sync:latest
+  #   environment:
+  #     PUID: "1000"
+  #     PGID: "1000"
+  #   volumes:
+  #     - /srv/docker/yt-playlist-sync/config:/config   # database + archives live here
+  #     - /mnt/nas/media/yt-playlists:/data             # playlist folders (with manifest.json)
+  #     - /srv/export:/export:ro                        # optional: scan before moving folders
+  #   command: ["python", "-m", "app.ta_import", "--source", "/export", "--dry-run"]

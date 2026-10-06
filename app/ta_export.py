@@ -25,12 +25,12 @@ from typing import Any
 import httpx
 
 from .paths import sanitize_filename, sanitize_folder_name
+from .ytdlp import append_archive
 
 log = logging.getLogger(__name__)
 
 API_PLAYLISTS = "/api/playlist/"
 API_VIDEOS = "/api/video/"
-ARCHIVE_NAME = "youtube"
 MANIFEST_NAME = "manifest.json"
 _THUMB_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 _VIDEO_EXTS = {".mp4", ".mkv", ".webm"}
@@ -407,23 +407,6 @@ def _write_file(path: Path, data: bytes, dry_run: bool) -> bool:
         tmp.write_bytes(data)
         os.replace(tmp, path)
     return True
-
-
-def append_archive(path: Path, ids: list[str], dry_run: bool) -> int:
-    """Append missing ``youtube <id>`` lines; existing lines are never touched."""
-    existing: set[str] = set()
-    if path.exists():
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            parts = line.split()
-            if len(parts) >= 2:
-                existing.add(parts[-1])
-    fresh = [v for v in ids if v not in existing]
-    if fresh and not dry_run:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as fh:
-            for vid in fresh:
-                fh.write(f"{ARCHIVE_NAME} {vid}\n")
-    return len(fresh)
 
 
 def _thumb_src(media_root: Path, meta: VideoMeta | None) -> Path | None:

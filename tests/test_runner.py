@@ -118,3 +118,18 @@ def test_listing_failure_returns_failed_result(tmp_path, stub):
     res = run(params(tmp_path, stub, pid="PLunknown"))
     assert not res.success and "Could not list playlist" in res.error_summary
     assert res.entries == []  # no snapshot: jobqueue must keep the previous listing
+
+
+def test_listing_gone_is_flagged(tmp_path, stub):
+    stub.data_ref["listing_error"]["PLaaa"] = "The playlist does not exist"
+    stub.save()
+    res = run(params(tmp_path, stub))
+    assert res.gone and not res.success and res.entries == []
+    assert "Could not list playlist" in res.error_summary
+
+
+def test_listing_forbidden_is_not_gone(tmp_path, stub):
+    stub.data_ref["listing_error"]["PLaaa"] = "HTTP Error 403: Forbidden"
+    stub.save()
+    res = run(params(tmp_path, stub))
+    assert res.forbidden and not res.gone

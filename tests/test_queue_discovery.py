@@ -203,15 +203,18 @@ def test_update_after_403_runs_update(cfg, monkeypatch):
     assert calls == [False]
 
 
-def test_apply_discovery_types_rename_and_removal(cfg):
+def test_apply_discovery_types_rename_keeps_unseen_active(cfg):
     stats = apply_discovery(
         [PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist 2024")], "setlist"
     )
     assert stats.new == 2 and len(stats.to_enqueue) == 2
     assert playlists()["PL1"][0] == "sync" and playlists()["PL2"][0] == "oneshot"
     stats = apply_discovery([PlaylistInfo("PL1", "Winter Setlist")], "setlist")
+    assert stats.new == 0 and stats.updated == 1 and not hasattr(stats, "removed")
     assert playlists()["PL1"][0] == "sync"
-    assert playlists()["PL2"][2] == "removed" and stats.removed == 1
+    # PL2 is absent from the listing: discovery leaves it alone (unlisted playlists keep
+    # syncing), only a sync run can confirm that it is gone.
+    assert playlists()["PL2"][:3] == ("oneshot", "new", "active")
     with session_scope() as s:
         assert len(s.scalars(select(Playlist)).all()) == 2
 
@@ -446,3 +449,59 @@ def test_restart_requeues_interrupted_jobs(cfg):
         assert sorted(j.status for j in s.scalars(select(Job)).all()) == [
             "interrupted", "interrupted", "success", "success",
         ]
+
+
+def test_gone_playlist_becomes_removed_oneshot(cfg, stub):
+    """A sync run confirms the loss: removed + oneshot, counts kept, retry works."""
+    apply_discovery([PlaylistInfo("PLgone", "Sommer Mix")], "setlist")
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == "PLgone"))
+        pl = s.get(Playlist, pk)
+        pl.downloaded_count = 7
+        pl.size_bytes = 1234
+    stub.data_ref["listing_error"]["PLgone"] = "The playlist does not exist"
+    stub.save()
+
+    async def scenario():
+        queue = JobQueue(cfg)
+        await queue.start()
+        jid = queue.enqueue(pk, "manual")
+        assert jid is not None
+        await queue.wait_for_jobs([jid], poll=0.2)
+        # gone: sync status changes, local numbers stay as they were
+        assert playlists()["PLgone"][:3] == ("oneshot", "failed", "removed")
+        with session_scope() as s:
+            pl = s.get(Playlist, pk)
+            assert pl.downloaded_count == 7 and pl.size_bytes == 1234
+        # the playlist exists again: a manual retry runs and restores "active"
+        stub.data_ref["listing_error"].pop("PLgone")
+        stub.data_ref["playlists"]["PLgone"] = [{"id": "vid00000077", "title": "Re"}]
+        stub.save()
+        jid = queue.enqueue(pk, "manual")
+        assert jid is not None
+        assert await queue.wait_for_jobs([jid], poll=0.2) == {jid: "success"}
+        await queue.stop()
+
+    asyncio.run(scenario())
+    # the type is never restored automatically, only remote_status is
+    assert playlists()["PLgone"][:3] == ("oneshot", "done", "active")
+
+
+def test_listing_forbidden_keeps_sync_and_active(cfg, stub):
+    """HTTP 403 while listing is not proof that the playlist is gone."""
+    apply_discovery([PlaylistInfo("PL403", "Sommer Mix")], "setlist")
+    stub.data_ref["listing_error"]["PL403"] = "HTTP Error 403: Forbidden"
+    stub.save()
+
+    async def scenario():
+        with session_scope() as s:
+            pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == "PL403"))
+        queue = JobQueue(cfg)
+        await queue.start()
+        jid = queue.enqueue(pk, "manual")
+        assert jid is not None
+        await queue.wait_for_jobs([jid], poll=0.2)
+        await queue.stop()
+
+    asyncio.run(scenario())
+    assert playlists()["PL403"][:3] == ("sync", "failed", "active")

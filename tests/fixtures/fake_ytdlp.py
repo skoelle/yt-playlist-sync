@@ -27,6 +27,10 @@ def main():
             print(json.dumps({"_type": "playlist", "entries": entries}))
         else:
             pid = re.search(r"list=([^&]+)", url).group(1)
+            err = data.get("listing_error", {}).get(pid)
+            if err is not None:
+                log_err(f"ERROR: [youtube:playlist] {pid}: {err}")
+                return 1
             vids = data["playlists"][pid]
             print(json.dumps({"_type": "playlist", "id": pid,
                               "entries": [{"id": v["id"], "title": v["title"]} for v in vids]}))
