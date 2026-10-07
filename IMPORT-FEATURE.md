@@ -101,6 +101,10 @@ Projektregeln, die gelten (AGENTS.md / SPEC):
 
 ### 3.3 TubeSync (FS-only, kein API)
 
+> **Korrigiert 2026-10-07:** Das Layout unten war ein Annahme-Stand und traf nicht zu. Die
+> Umsetzung liest stattdessen die SQLite-Datei von TubeSync (siehe **3c**), Dateien liegen
+> unter `downloads/video/<jahr>/…`.
+
 - Layout: `…/youtube-dl/{channel}/{upload_date} - {title}-{youtube_id}.{ext}`
   (Video-ID als eigenes Suffix, in der Regel **ohne** eckige Klammern).
 - Konsequenz: Der FS-Scan darf nicht nur nach `[<id>]` suchen, sondern nach
@@ -214,8 +218,44 @@ ein Sync-Lauf beim Listing bestätigt, dass die Playlist weg ist (gelöscht, pri
 `ytdlp.is_gone`); 403/429/Netzwerk/Alter zählen nicht. Bei einem späteren Erfolg wird
 nur `remote_status` wieder `active`, der Typ bleibt `oneshot`. Damit entfällt der in
 Phase 2 geplante `manual`-Guard gegen das Entfernen manueller Playlists (die Frage
-stellte sich schon vorher nicht mehr), die Phase selbst (manuelles Eintragen per Formular)
+stellt sich schon vorher nicht mehr), die Phase selbst (manuelles Eintragen per Formular)
 bleibt unverändert geplant.
+
+---
+
+## 3c. TubeSync-Export (umgesetzt): Offline-CLI `ts_export`
+
+**Stand 2026-10-07.** `python -m app.ts_export` (`app/ts_export.py`) liest eine TubeSync-
+Instanz **ausschließlich lesend** (SQLite-URI `file:…?mode=ro`) und schreibt dasselbe
+Layout wie `ta_export`; den Import übernimmt danach `ta_import` unverändert. Bewusste
+Abweichung von §3.3 („FS-only"): TubeSync hat kein API, aber eine SQLite-Datei – die ist
+deutlich zuverlässiger als ein Dateinamen-Scan.
+
+- **Befund gegen die reale Instanz** (Okt 2026): `config/db.sqlite3` mit `sync_source`
+  (`key` = `PL…`, `name` = Playlisttitel, `directory`, `source_type`), `sync_media`
+  (`key` = Videoid, `title`, `duration`, `published`, `created`, `media_file`, `thumb`,
+  `source_id`; `media_file` ist eine leere Zeile, wenn nichts geladen wurde),
+  `sync_media_metadata` (`site='Youtube'`, `key` = Videoid, `value` = volle yt-dlp-JSON,
+  `media_id` verlinkt die Media-Zeile, ältere Zeilen nur über `key`). Dateien:
+  `downloads/video/<jahr>/…mkv`, Thumbs `config/media/thumbs/<xx>/<uuid>.jpg`. Alle
+  Quellen sind Playlists (`source_type='p'`).
+- **Reihenfolge:** TubeSync speichert keine Playlist-Position (`playlist_index` in der
+  Metadata-JSON ist durchgehend `null`) – Sortierung über `created`, dann `published`; ein
+  gesetztes `playlist_index` hätte Vorrang.
+- **Gemeinsame Helfer:** `app/export_common.py` (Platzierung über `.part` + Rename,
+  Hardlink mit Copy-Fallback, Reparatur, Report, `load_dotenv`, `print_report`);
+  `ta_export` importiert sie unter seinen alten Namen (`_place_file`, `_same_device`, …),
+  damit die bestehenden Tests unverändert bleiben.
+- **Daten:** Titel/Dauer aus `sync_media`, Zähler/Codecs/Auflösung aus der yt-dlp-JSON
+  (`prune_info` behält nur die Gallery-Felder, `description` bleibt in TubeSync), Thumbs
+  landen als `NN - <titel> [<id>].jpg` neben dem Video, kein Cover (TubeSync kennt keins),
+  Quellen ohne `source_type='p'` werden mit Warnung übersprungen.
+- **CLI:** `--db/--media-root/--thumbs-root/--target` plus Env `TS_DB`, `TS_MEDIA_ROOT`,
+  `TS_THUMBS_ROOT`, `TS_EXPORT_TARGET`; Flags `--mode`, `--metadata-only`, `--dry-run`,
+  `--playlist`, `--no-archives`, `-q`; Exit 2 bei `TsError`/fehlenden Optionen, 1 bei
+  `failed`. Archiv-, Manifest- und Report-Verhalten identisch zu `ta_export`.
+- **Tests:** `tests/test_ts_export.py` (23) mit Mini-SQLite-Fixture inklusive End-to-End
+  `ts_export → ta_import` gegen eine frische App-DB; keine echte TubeSync-Datei im Repo.
 
 ---
 
