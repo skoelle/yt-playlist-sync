@@ -200,7 +200,7 @@ function oneshotRow(p) {
   const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
   const acts = [];
   if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Retry</button>`);
-  if (p.state === "new") acts.push(`<button data-action="run" data-id="${p.id}">Download now</button>`);
+  if (p.state === "new" || p.state === "idle") acts.push(`<button data-action="run" data-id="${p.id}">Download now</button>`);
   if (p.state === "done") acts.push(`<button data-action="rerun" data-id="${p.id}">Full Re-Run</button>`);
   if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
   acts.push(`<button data-action="to-sync" data-id="${p.id}">Mark as sync</button>`);
