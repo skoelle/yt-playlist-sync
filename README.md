@@ -269,6 +269,47 @@ Rules the importer follows:
 If a playlist no longer exists on YouTube, it shows up as *removed* + *oneshot* only after you
 run it once manually (see the sync rule above); until then it simply sits in the oneshot tab.
 
+## 🧹 Forgetting a playlist (maintenance)
+
+`forget` removes every trace of one or more playlists while the application is stopped: the
+database row with its listing entries and jobs, the download archives in `/config/archives`
+and `/data/archives`, and the playlist folder – which is moved into `/data/.quarantine`
+instead of being deleted. Use it before re-importing the same playlist from another source:
+the importer alone would keep the stale listing rows, the old download archive and the old
+files next to the new ones.
+
+```bash
+docker compose stop yt-playlist-sync
+
+# 1. preview (the default; nothing is written)
+docker compose run --rm yt-playlist-sync python -m app.forget --playlist PLxxxxxxxx
+
+# 2. apply: database/archives backup first, then folder -> archives -> database rows
+docker compose run --rm yt-playlist-sync python -m app.forget --playlist PLxxxxxxxx --apply
+
+docker compose up -d
+```
+
+| Option | Purpose |
+|---|---|
+| `--playlist ID` | playlist to forget (repeatable, required) |
+| `--quarantine DIR` | where folders are moved (default: `/data/.quarantine`) |
+| `--keep-folder` | leave the folder in `/data` (expect duplicate files on the next import) |
+| `--delete-folder` | delete the folder instead of quarantining it (requires `--yes`) |
+| `--no-backup` | skip the database/archives backup that runs before `--apply` |
+| `--apply` | actually change things (default: report only) |
+
+- Stop the container first: a playlist that is `queued`/`running`, or still has an open job,
+  is **refused** – the other requested playlists are processed anyway.
+- Exit codes: `0` all good, `1` something was refused or failed, `2` usage/database error.
+- The backup lands in `/backup` (`app-*.db` + `archives-*.tar.gz`, same rotation as the
+  nightly run) and is the only undo besides the quarantined folder.
+- A folder whose database row is already gone is found by its `… [<playlist_id>]` suffix and
+  cleaned up as well.
+- This is the single documented exception to the *never delete* rule: it is manual, offline,
+  reports first and backs up first (`SPEC.md` §15). The runtime itself still never removes
+  anything.
+
 ## 🛠️ Development
 
 ```bash

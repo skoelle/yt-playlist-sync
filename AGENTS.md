@@ -43,8 +43,9 @@ FastAPI (app/main.py, Lifespan)
 | `app/export_common.py` | Gemeinsamer Kern beider Exporte: `MANIFEST_NAME`/`THUMB_EXTS`, `place_file` (`.part` → rename, `auto` Hardlink→Copy-Fallback, Größen-Check mit `repair`), `write_file`, `same_device`, `safe_id`, `check_mode`, Reports `PlaylistReport`/`ExportReport` + `print_report`, `load_dotenv`, `human` |
 | `app/ts_export.py` | TubeSync-Export als Standalone-Skript (`python -m app.ts_export`): öffnet `config/db.sqlite3` **strikt read-only** (`file:…?mode=ro`), liest `sync_source`/`sync_media`/`sync_media_metadata` (`read_library`, Metadata über `media_id` sonst per `key`), schreibt dasselbe Layout/Manifest/Archive wie `ta_export` (Thumb-Sidecars, kein Cover, `description` bleibt in TubeSync); Reihenfolge `playlist_index` sonst `created`/`published`; CLI mit `TS_DB`/`TS_MEDIA_ROOT`/`TS_THUMBS_ROOT`/`TS_EXPORT_TARGET`, Exit 2 bei `TsError` |
 | `app/ta_import.py` | Offline-Import eines exportierten Baums (`python -m app.ta_import`): `scan_manifests`/`select_manifests`/`resolve_folder` (rein), `apply_import` (Upsert `playlists` + `playlist_entries` in je einer Session pro Playlist, `reason`/`unavailable` unangetastet, nie löschen), Append-only-Merge der lokal vorhandenen Videos nach `config/archives`, alle Importe werden `oneshot` (neue Zeile: `done` nur bei vollständigen Dateien sonst `idle`; ein Update stuft vorhandene Zustände nie herunter), `--dry-run` schreibt nichts |
+| `app/forget.py` | Wartungs-CLI (`python -m app.forget --playlist <id> …`, gestoppte App): `collect` (read-only Snapshot inkl. offener Jobs + Ordnerkandidaten über `[…<pid>]`-Suffix), `apply_forget` pro Playlist in einer Session, **Reihenfolge Ordner → Archive → DB** (`playlist_entries` → `jobs` → `playlists`, `foreign_keys=ON`), Ordner standardmäßig nach `<data>/.quarantine` (`--keep-folder`/`--delete-folder`+`--yes`), Guard bei `queued`/`running` oder offenem Job (Playlist `blocked`, die anderen laufen weiter), Backup (`backup_database`+`backup_archives`) nur mit `--apply`, **Default = Dry-Run**; die einzige dokumentierte Ausnahme von „nie löschen" (SPEC §15) |
 
-Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py` – **Ausnahme:** `ta_import.py` schreibt dieselben Tabellen offline (CLI, kein Laufzeitpfad, dokumentiert wie `backup.py`). `ts_export.py` liest fremde Daten (TubeSync-SQLite) strikt read-only.
+Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py` – **Ausnahme:** `ta_import.py` und `forget.py` schreiben dieselben Tabellen offline (CLI, kein Laufzeitpfad, dokumentiert wie `backup.py`). `ts_export.py` liest fremde Daten (TubeSync-SQLite) strikt read-only.
 
 ## Befehle
 
@@ -69,6 +70,9 @@ python3 -m venv .venv
 # Import (App stoppen; --source zeigt auf den Export, Default: DATA_DIR)
 .venv/bin/python -m app.ta_import --dry-run
 
+# Forget (App stoppen; Default nur Report, erst --apply ändert etwas, siehe SPEC §15)
+.venv/bin/python -m app.forget --playlist <pid>
+
 # Derselbe Export im Container auf der NAS (lokal, ohne Netzübertragung; README-Abschnitt
 # „Running the export inside the container"; im Image gibt es kein .env → alles über -e)
 docker run --rm -e TA_API_URL=… -e TA_API_HOST=… -e TA_API_TOKEN=… \
@@ -92,13 +96,13 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **148 Tests grün** (`pytest -q`, ~24 s).
+- Bestehender Stand: **164 Tests grün** (`pytest -q`, ~27 s).
 
 ## Harte Regeln
 
 Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
-1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_run`) und Temp-Dateien in Temporärverzeichnissen.
+1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_run`), Temp-Dateien in Temporärverzeichnissen und die Wartungs-CLI `forget` (`app/forget.py` – nur manuell, nur gestoppte App, Default Dry-Run, vorher Backup, Ordner wandert nach `.quarantine`; SPEC §15).
 2. **Ein Worker.** Niemals Parallelität von Downloads einführen (ein offener Job pro Playlist, `PRIORITY`-Map: manual/retry/full_rerun=0 > discovery=1 > nightly=2).
 3. **Keine privaten Daten im Repo.** Nur Platzhalter (`@beispielkanal`, leere HC-URLs); die öffentliche Image-URL ist `ghcr.io/skoelle/yt-playlist-sync`. `.env` bleibt in `.gitignore`.
 4. **Kein YouTube-Login, keine Secrets, kein API-Key.** `DATABASE_URL` und Healthchecks-URLs sind Deployment-Detail.
@@ -133,7 +137,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (148), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (164), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License
