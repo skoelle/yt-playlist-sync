@@ -45,6 +45,22 @@ services:
   #     - /srv/export:/export         # export target (hardlink only if the filesystem allows it)
   #   command: ["python", "-m", "app.ta_export", "--dry-run"]
 
+  # One-shot TubeSync export – see README, "Exporting from TubeSync".
+  # Start with: docker compose run --rm ts-export --dry-run
+  # ts-export:
+  #   image: ghcr.io/skoelle/yt-playlist-sync:latest
+  #   environment:
+  #     PUID: "1000"
+  #     PGID: "1000"
+  #     TS_DB: /ta/config/db.sqlite3
+  #     TS_MEDIA_ROOT: /ta/downloads
+  #     TS_THUMBS_ROOT: /ta/config/media
+  #     TS_EXPORT_TARGET: /export
+  #   volumes:
+  #     - /srv/tubesync:/ta:ro        # TubeSync data (config/ + downloads/), read-only
+  #     - /srv/export:/export         # export target (hardlink only if the filesystem allows it)
+  #   command: ["python", "-m", "app.ts_export", "--dry-run"]
+
   # One-shot import of an exported tree (stop the main service first) – see README,
   # "Importing the exported tree".
   # Start with: docker compose run --rm ta-import --dry-run
