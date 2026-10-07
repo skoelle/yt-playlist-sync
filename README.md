@@ -166,6 +166,63 @@ Run it with `--dry-run` first (report only), then `--metadata-only` and finally 
 flags for the videos. There is no `.env` inside the image, so every value is passed with
 `-e` (or point `--env-file` at a mounted file).
 
+## 📺 Exporting from TubeSync
+
+[TubeSync](https://github.com/TubeSync/tubesync) has no JSON API, so `app.ts_export.py` opens
+its SQLite database **read-only** (`sync_source`, `sync_media`, `sync_media_metadata`) and pairs
+the rows with the files below its `downloads/` folder. The result is the same folder layout as
+above, ready for `app.ta_import.py`:
+
+```bash
+# values live in .env (gitignored): TS_DB, TS_MEDIA_ROOT, TS_THUMBS_ROOT, TS_EXPORT_TARGET
+.venv/bin/python -m app.ts_export --dry-run --metadata-only   # report only
+.venv/bin/python -m app.ts_export --metadata-only             # metadata, no videos
+.venv/bin/python -m app.ts_export                             # full copy
+.venv/bin/python -m app.ts_export --playlist PLxxxx --mode copy
+```
+
+| Option | Purpose |
+|---|---|
+| `--db` | path of TubeSync's `db.sqlite3` (always opened read-only) |
+| `--media-root` | TubeSync `downloads/` directory (contains `video/`) |
+| `--thumbs-root` | TubeSync `media/` directory holding `thumbs/`; defaults to the directory next to the database (`config/media`) |
+| `--target` | export root (the folder the playlist directories are written to) |
+| `--metadata-only`, `--dry-run`, `--mode`, `--playlist ID`, `--no-archives` | same meaning as in the TubeArchivist export |
+
+Details worth knowing:
+
+- **Order:** TubeSync stores no playlist position (the `playlist_index` field in its metadata JSON
+  is empty), so videos are numbered in the order TubeSync crawled them (`created`, then
+  `published`). A metadata row that does carry a `playlist_index` wins over that.
+- **Titles and metadata** come from `sync_media`/`sync_media_metadata`. The description stays in
+  the TubeSync database and is not copied into every `.info.json` – the gallery never reads it.
+- **Thumbnails** are copied from `thumbs/<xx>/<uuid>.jpg` to `NN - <title> [<video id>].jpg` next
+  to the video. TubeSync keeps no playlist cover, so the gallery shows no cover there.
+- Rows without a media file (TubeSync only writes `media_file` once a download exists, and a
+  file can vanish) are exported as placeholders (`file: null`, `downloaded: false`) and counted
+  as `miss` – exactly what the importer expects.
+- Sources that are not playlists (`source_type != 'p'`) are skipped with a warning.
+- Everything else – the report, the archives, `manifest.json`, hardlink/copy behaviour and the
+  promise to never delete or overwrite anything – is identical to the TubeArchivist export.
+
+The same container example works for TubeSync, only the environment and the mounts differ:
+
+```bash
+docker run --rm \
+  -e PUID=1000 -e PGID=1000 \
+  -e TS_DB=/ta/config/db.sqlite3 \
+  -e TS_MEDIA_ROOT=/ta/downloads \
+  -e TS_THUMBS_ROOT=/ta/config/media \
+  -e TS_EXPORT_TARGET=/export \
+  -v /path/to/tubesync:/ta:ro \
+  -v /path/to/export:/export \
+  ghcr.io/skoelle/yt-playlist-sync:latest \
+  python -m app.ts_export --dry-run
+```
+
+The database is opened read-only, so TubeSync can keep running; if SQLite still refuses to read
+because of a pending transaction, stop TubeSync and run the export again.
+
 ## 📥 Importing the exported tree
 
 The export is only a folder tree until the app knows about it. `app.ta_import.py` reads the
@@ -239,7 +296,9 @@ app/
 ├── jobqueue.py, runner.py   Single-worker queue and the yt-dlp subprocess runner
 ├── ytdlp.py, discovery.py   yt-dlp command builder/parsers, playlist discovery
 ├── healthchecks.py, paths.py  Ping helper, folder-name sanitising
+├── export_common.py         Shared file placement, reports and CLI helpers of both exporters
 ├── ta_export.py               Standalone TubeArchivist export (python -m app.ta_export)
+├── ts_export.py               Standalone TubeSync export, reads its SQLite read-only (python -m app.ts_export)
 ├── ta_import.py               Offline import of an exported tree into the database (python -m app.ta_import)
 └── static/                  index.html, app.js, style.css (vanilla, no build step)
 migrations/                  Alembic schema migrations

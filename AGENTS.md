@@ -39,11 +39,12 @@ FastAPI (app/main.py, Lifespan)
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
 | `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
-| `app/ta_export.py` | TubeArchivist-Export als Standalone-Skript (`python -m app.ta_export`), kein DB-Zugriff: `TaClient` (REST + Paginierung, `TA_API_HOST` Host-Header), `index_media`, `_place_file` (atomar über `.part`, `auto`-Modus Hardlink→Copy-Fallback, Größen-Check mit `repair`), `export()` schreibt Ordner/Sidecars/`manifest.json`/Archive, nie löschen, CLI + `.env`-Loader; läuft auch im Container auf der NAS (`/ta:ro` + `/export` gemountet; Hardlinks dort meist nicht möglich → `auto` fällt auf Kopie zurück) |
-
+| `app/ta_export.py` | TubeArchivist-Export als Standalone-Skript (`python -m app.ta_export`), kein DB-Zugriff: `TaClient` (REST + Paginierung, `TA_API_HOST` Host-Header), `index_media`, `export()` schreibt Ordner/Sidecars/`manifest.json`/Archive, nie löschen, CLI + `.env`-Loader; läuft auch im Container auf der NAS (`/ta:ro` + `/export` gemountet; Hardlinks dort meist nicht möglich → `auto` fällt auf Kopie zurück); Platzierungs-/Report-Helfer importiert es aus `export_common` unter den alten Namen (`_place_file`, `_same_device`, …) |
+| `app/export_common.py` | Gemeinsamer Kern beider Exporte: `MANIFEST_NAME`/`THUMB_EXTS`, `place_file` (`.part` → rename, `auto` Hardlink→Copy-Fallback, Größen-Check mit `repair`), `write_file`, `same_device`, `safe_id`, `check_mode`, Reports `PlaylistReport`/`ExportReport` + `print_report`, `load_dotenv`, `human` |
+| `app/ts_export.py` | TubeSync-Export als Standalone-Skript (`python -m app.ts_export`): öffnet `config/db.sqlite3` **strikt read-only** (`file:…?mode=ro`), liest `sync_source`/`sync_media`/`sync_media_metadata` (`read_library`, Metadata über `media_id` sonst per `key`), schreibt dasselbe Layout/Manifest/Archive wie `ta_export` (Thumb-Sidecars, kein Cover, `description` bleibt in TubeSync); Reihenfolge `playlist_index` sonst `created`/`published`; CLI mit `TS_DB`/`TS_MEDIA_ROOT`/`TS_THUMBS_ROOT`/`TS_EXPORT_TARGET`, Exit 2 bei `TsError` |
 | `app/ta_import.py` | Offline-Import eines exportierten Baums (`python -m app.ta_import`): `scan_manifests`/`select_manifests`/`resolve_folder` (rein), `apply_import` (Upsert `playlists` + `playlist_entries` in je einer Session pro Playlist, `reason`/`unavailable` unangetastet, nie löschen), Append-only-Merge der lokal vorhandenen Videos nach `config/archives`, alle Importe werden `oneshot` (neue Zeile: `done` nur bei vollständigen Dateien sonst `idle`; ein Update stuft vorhandene Zustände nie herunter), `--dry-run` schreibt nichts |
 
-Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py` – **Ausnahme:** `ta_import.py` schreibt dieselben Tabellen offline (CLI, kein Laufzeitpfad, dokumentiert wie `backup.py`).
+Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py` – **Ausnahme:** `ta_import.py` schreibt dieselben Tabellen offline (CLI, kein Laufzeitpfad, dokumentiert wie `backup.py`). `ts_export.py` liest fremde Daten (TubeSync-SQLite) strikt read-only.
 
 ## Befehle
 
@@ -61,6 +62,9 @@ python3 -m venv .venv
 
 # TubeArchivist-Export (Werte lokal in .env: TA_API_URL/TOKEN/HOST/TARGET/MEDIA_ROOT)
 .venv/bin/python -m app.ta_export --dry-run --metadata-only
+
+# TubeSync-Export (Werte lokal in .env: TS_DB/TS_MEDIA_ROOT/TS_THUMBS_ROOT/TS_EXPORT_TARGET)
+.venv/bin/python -m app.ts_export --dry-run --metadata-only
 
 # Import (App stoppen; --source zeigt auf den Export, Default: DATA_DIR)
 .venv/bin/python -m app.ta_import --dry-run
@@ -88,7 +92,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **124 Tests grün** (`pytest -q`, ~22 s).
+- Bestehender Stand: **148 Tests grün** (`pytest -q`, ~24 s).
 
 ## Harte Regeln
 
@@ -129,7 +133,7 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 - `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
 - `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
 - `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (124), `ruff check .` sauber. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (148), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License
