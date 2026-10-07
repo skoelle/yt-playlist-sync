@@ -207,6 +207,35 @@ def test_import_incomplete_files_stay_idle_and_pending(cfg, tmp_path):
     assert (cfg.archives_dir / "PL1.txt").read_text() == "youtube vid00000001\n"
 
 
+def test_import_update_never_downgrades_done_or_failed(cfg, tmp_path):
+    export = tmp_path / "export"
+    write_export(export, videos=(True, False))  # incomplete folder
+    move_into_place(cfg, export)
+    now = utcnow()
+    with session_scope() as s:
+        s.add(
+            Playlist(
+                playlist_id="PL1", title="Fertig", type="oneshot", folder_name=FOLDER,
+                state="done", remote_status="active", downloaded_count=2,
+                first_seen_at=now, last_seen_at=now, completed_at=now,
+            )
+        )
+
+    report = apply_import(scan_manifests(export), data_dir=cfg.data_dir, config_dir=cfg.config_dir)
+    prow = report.playlists[0]
+    assert prow.action == "updated" and prow.state == "done"
+    row = playlist_row()
+    assert row[0:4] == ("oneshot", "done", "active", 1)  # counts follow the files
+    assert row[6] is True  # completed_at stays
+
+    with session_scope() as s:
+        pl = s.scalar(select(Playlist).where(Playlist.playlist_id == "PL1"))
+        pl.state = "failed"
+
+    apply_import(scan_manifests(export), data_dir=cfg.data_dir, config_dir=cfg.config_dir)
+    assert playlist_row()[1] == "failed"  # an update never clears a failure either
+
+
 def test_import_dry_run_changes_nothing(cfg, tmp_path):
     export = tmp_path / "export"
     write_export(export)

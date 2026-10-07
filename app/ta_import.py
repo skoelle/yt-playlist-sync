@@ -8,7 +8,9 @@ Reads ``<source>/<folder>/manifest.json`` plus the playlist folders that live un
 download archives in ``config_dir/archives`` receive an append-only line for every
 local video file. Every imported playlist becomes a ``oneshot`` playlist so no
 nightly sync picks it up by accident. Local files decide everything: a playlist is
-``done`` only when every manifest entry has a file on disk.
+``done`` only when every manifest entry has a file on disk. An update never
+downgrades what a run already reached: an existing ``done`` or ``failed`` stays as
+it is when the folder is incomplete, and only a complete folder sets ``done``.
 
 ``python -m app.ta_import --dry-run`` reports what would change without touching
 playlists, entries or archives. Move the folders into place first, then import.
@@ -182,7 +184,10 @@ def _import_one(
         files = int(gallery["video_count"])
 
         if folder_ok:
-            state = "done" if manifest.entries and files >= len(manifest.entries) else "idle"
+            complete = bool(manifest.entries) and files >= len(manifest.entries)
+            state = "done" if complete else "idle"
+            if pl is not None and not complete:
+                state = pl.state  # incomplete files never downgrade an existing state
         elif pl is not None:
             state = pl.state  # nothing on disk: leave the state as it is
         else:
