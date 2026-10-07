@@ -8,6 +8,7 @@ const state = {
   tab: "status",
   status: null,
   busy: false,
+  pending: false,
   log: { jobId: null, offset: 0, open: false, finished: false },
   sort: { key: "title", dir: "asc" },
   syncSort: { key: "title", dir: "asc" },
@@ -477,8 +478,11 @@ function openLog(jobId) {
   pollLog();
 }
 
-async function tick() {
-  if (state.busy) return;
+async function tick(explicit = false) {
+  if (state.busy) {
+    if (explicit) state.pending = true;
+    return;
+  }
   state.busy = true;
   try {
     const st = await api("/status");
@@ -509,7 +513,33 @@ async function tick() {
     $("#banners")._html = null;
   } finally {
     state.busy = false;
+    if (state.pending) { state.pending = false; tick(true); }
   }
+}
+
+function renderDetailLoading() {
+  const cover = $("#detail-cover");
+  cover.hidden = true;
+  cover.removeAttribute("src");
+  cover.dataset.cv = "";
+  $("#detail-yt").hidden = true;
+  setText("detail-title", "…");
+  setText("detail-stats", "");
+  setText("detail-video-summary", "");
+  setText("detail-files-summary", "");
+  for (const id of ["detail-badges", "detail-actions", "detail-kv"]) {
+    const el = $("#" + id);
+    el.innerHTML = "";
+    el._html = "";
+  }
+  $("#detail-videos-none").textContent = "Loading…";
+  $("#detail-videos-none").hidden = false;
+  $("#detail-videos-wrap").hidden = true;
+  $("#detail-videos-table tbody").innerHTML = "";
+  $("#detail-files-none").hidden = true;
+  $("#detail-files-wrap").hidden = true;
+  $("#detail-files-table tbody").innerHTML = "";
+  $("#detail-jobs-table tbody").innerHTML = "";
 }
 
 function showTab() {
@@ -520,6 +550,7 @@ function showTab() {
     state.tab = "playlist";
     state.detailId = Number(m[1]);
     state.detail = null;
+    renderDetailLoading();
   } else {
     state.tab = TABS.includes(h) ? h : "status";
     state.detailId = null;
@@ -528,7 +559,7 @@ function showTab() {
   for (const sec of document.querySelectorAll("main > section")) sec.hidden = sec.dataset.tab !== state.tab;
   const navTab = state.tab === "playlist" ? state.detailFrom : state.tab;
   for (const a of document.querySelectorAll("nav a")) a.classList.toggle("active", a.dataset.tab === navTab);
-  tick();
+  tick(true);
 }
 
 async function act(action, el) {
@@ -567,7 +598,7 @@ async function act(action, el) {
   } catch (err) {
     alert(err.message);
   }
-  tick();
+  tick(true);
 }
 
 document.addEventListener("click", (ev) => {
