@@ -191,7 +191,9 @@ eigenständiges Skript umgesetzt – bewusst **nicht** als Queue-Trigger (Phase 
   (Allow-Liste, gewinnt über `--skip`), `--skip`, `--no-archives`, `--dry-run`.
 - **Regeln:** alle Importe werden `oneshot`+`active`; `state` ist `done`, wenn jede
   Manifest-Eintragung eine lokale Datei hat, sonst `idle` (fehlende Videos bleiben
-  über Retry ladbar); `folder_name` = tatsächlicher Ordner auf der Platte (DB-Name
+  über Download now ladbar). Ein erneuter Lauf („Update") stuft vorhandene Zustände
+  **nie** herunter – ein per Lauf auf `done` gebrachtes oder `failed`-Playback bleibt,
+  auch wenn der Ordner unvollständig ist; `folder_name` = tatsächlicher Ordner auf der Platte (DB-Name
   gewinnt, wenn dieser Ordner existiert); `playlist_entries` werden geupsertet (Position,
   Titel, Dauer, `remote_present=True`), `reason`/`unavailable` und nicht gelistete Zeilen
   bleiben unangetastet, Zeilen werden nie entfernt.

@@ -198,7 +198,9 @@ Rules the importer follows:
 - Every imported playlist becomes **oneshot** (frozen – the nightly sync never picks it up;
   switch the type back in the UI if you want it synced).
 - **Local files decide**: `done` only when every manifest entry has a file on disk, otherwise
-  `idle`, so missing videos can be downloaded later with *Retry*/*Full Re-Run*.
+  `idle`, so missing videos can be downloaded later with *Download now*/*Full Re-Run*.
+- An **update never downgrades**: a playlist you already brought to `done` (or `failed`) keeps
+  that state even if the folder is incomplete; only a complete folder sets `done`.
 - Entries are upserted, never removed. `reason`/`unavailable` from earlier YouTube runs are
   never overwritten; rows that are not in the manifest stay untouched.
 - Every local video file gets an append-only `youtube <id>` line in
