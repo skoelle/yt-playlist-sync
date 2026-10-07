@@ -98,7 +98,11 @@ class Run(Base):
 
 
 class PlaylistEntry(Base):
-    """One remote playlist entry (snapshot from the last sync listing). Rows are never deleted."""
+    """One remote playlist entry (snapshot from the last sync listing).
+
+    The runtime never deletes a row; the offline maintenance CLI ``forget``
+    (SPEC section 15) is the only exception.
+    """
 
     __tablename__ = "playlist_entries"
     __table_args__ = (
