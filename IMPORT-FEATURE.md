@@ -256,6 +256,14 @@ deutlich zuverlässiger als ein Dateinamen-Scan.
   `failed`. Archiv-, Manifest- und Report-Verhalten identisch zu `ta_export`.
 - **Tests:** `tests/test_ts_export.py` (23) mit Mini-SQLite-Fixture inklusive End-to-End
   `ts_export → ta_import` gegen eine frische App-DB; keine echte TubeSync-Datei im Repo.
+- **Vorbereitung einer Neu-Importierung** derselben Playlist: `python -m app.forget`
+  (`app/forget.py`) entfernt vor dem Import die alte DB-Zeile samt `playlist_entries`/
+  `jobs`, beide Download-Archive und den Ordner (Default: Umzug nach
+  `<data>/.quarantine`, `--keep-folder`/`--delete-folder --yes` alternativ). Ohne diesen
+  Schritt blieben alte Listing-Zeilen (`remote_present`), das alte Archiv und die alten
+  Dateien neben den neuen stehen. Läuft nur gegen die gestoppte App, Default = Report,
+  erst `--apply`; Backup vor dem ersten Eingriff. Einzige dokumentierte Ausnahme der
+  Regel „nie löschen" – SPEC §15, README „Forgetting a playlist".
 
 ---
 

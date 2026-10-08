@@ -290,3 +290,37 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - Neu: TubeSync-Export `python -m app.ts_export` liest die TubeSync-Datenbank strikt read-only (SQLite `file:…?mode=ro`) und schreibt dasselbe Layout/`manifest.json`/Archive wie `ta_export`; gemeinsame Helfer in `app/export_common.py`. Reihenfolge über `playlist_index`, sonst `created`/`published`; `description` bleibt in TubeSync; kein Cover; Quellen ohne `source_type='p'` werden mit Warnung übersprungen (siehe README, `IMPORT-FEATURE.md` 3c).
 - Geändert: Discovery markiert nichts mehr als `removed` („nicht gelistet" bleibt sync); `removed` entsteht nur noch, wenn ein Sync-Lauf bestätigt, dass die Playlist weg ist – dann auch Typ `sync → oneshot`, bei Wiederkehr nur `remote_status` zurück auf `active` (siehe 6.1, 6.3).
 - Neu: Detailseite zeigt beim Playlist-Wechsel sofort einen Ladezustand statt des Inhalts der alten Playlist; ein laufender Poll verzögert den Wechsel nicht mehr bis zum nächsten Takt (siehe 9).
+- Neu: Wartungs-CLI `python -m app.forget` entfernt eine Playlist samt `playlist_entries`, `jobs`, Download-Archiven und Ordner (Quarantäne), **während die App gestoppt ist** – die einzige Ausnahme zur Regel „nie löschen" (siehe 15).
+
+## 15. Wartungs-CLI `app.forget`
+
+`python -m app.forget --playlist <id> [--playlist <id> …]` räumt die Spuren einer Playlist
+weg, bevor sie aus einer anderen Quelle neu importiert wird. Ohne diesen Schritt würden beim
+Import die alten Listing-Zeilen (`remote_present`), das alte Download-Archiv und die alten
+Dateien neben den neuen stehenbleiben. Pro Playlist, in dieser Reihenfolge:
+
+1. **Guard:** `state` in `queued`/`running` oder ein Job in `queued`/`running` → Playlist
+   wird als `blocked` verweigert, nichts geändert. Andere angeforderte Playlists laufen
+   trotzdem weiter (Exit-Code 1).
+2. **Ordner:** Wandert nach `<data>/.quarantine/<ordner>` (Default, `--quarantine <dir>`).
+   `--keep-folder` lässt ihn liegen (dann doppelte Dateien beim nächsten Import),
+   `--delete-folder` löscht ihn nur zusammen mit `--yes`. Erst der Ordner, dann alles
+   andere: schlägt der Umzug fehl, bleibt die Playlist unangetastet und der Lauf ist
+   wiederholbar. Ein Ordner außerhalb von `DATA_DIR` (unsicherer `folder_name`) wird
+   verweigert. Ordner ohne DB-Zeile werden über das Suffix `[…<playlist_id>]` in `DATA_DIR`
+   gefunden und ebenfalls mitgenommen.
+3. **Archive:** `<config>/archives/<id>.txt` und `<data>/archives/<id>.txt` werden entfernt
+   (beide existieren nur ergänzend, keins wird umgeschrieben).
+4. **Datenbank:** `playlist_entries` → `jobs` → `playlists` (FK-Reihenfolge, die Engine
+   läuft mit `PRAGMA foreign_keys=ON`). `runs` hängen nicht an Playlists und bleiben.
+
+Vor dem ersten Eingriff (nur mit `--apply`) legt der Lauf ein DB-Backup (sqlite3-Backup-API)
+und ein `archives-*.tar.gz` nach `BACKUP_DIR` an, gleiche Rotation wie der Nachtlauf;
+`--no-backup` überspringt beides. Ohne `--apply` berichtet das Kommando nur und schreibt
+gar nichts. Exit-Codes wie bei `ta_import`: `0` in Ordnung, `1` verweigert/fehlgeschlagen,
+`2` Usage- oder Datenbankproblem. Die Runtime löscht weiterhin nichts.
+
+**Ausnahme zur Regel „nie löschen" (Abschnitte 2 und 6):** `forget` ist die einzige Stelle,
+die DB-Einträge, Archive oder Ordner entfernt. Sie ist manuell, läuft nur gegen eine
+gestoppte App, ist standardmäßig ein Trockenlauf und legt vorher ein Backup an – niemals
+Teil eines Laufzeitpfads.
