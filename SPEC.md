@@ -86,8 +86,13 @@ Die Last ist minimal (ein Writer, wenige hundert Zeilen). SQLite ist dafür robu
 | `DRY_RUN` | `0` | `1` = nur auflisten und simulieren |
 | `LOG_LEVEL` / `LOG_RETENTION_DAYS` | `INFO` / `30` | Logging, Aufräumen alter Job-Logs (nie Videos) |
 | `BACKUP_DIR` / `BACKUP_KEEP` | `/backup` / `7` | Zielverzeichnis der nächtlichen Backups (DB + Download-Archive), Anzahl Kopien pro Typ (`0` = unbegrenzt) |
+| `TA_API_URL` / `TA_API_TOKEN` / `TA_API_HOST` | leer | TubeArchivist-Export (16): Basis-URL der API, Token (Deployment-Detail), Host-Header-Override für Deployments, die den URL-Host ablehnen |
+| `TA_MEDIA_ROOT` / `TA_EXPORT_TARGET` | leer | TubeArchivist-Export (16): Quellverzeichnis der TA-Daten, Ziel des Exports |
+| `TS_DB` / `TS_MEDIA_ROOT` / `TS_THUMBS_ROOT` / `TS_EXPORT_TARGET` | leer | TubeSync-Export (16): SQLite-Datei, Downloads, Thumbs (Quelle, nur lesend), Ziel des Exports |
 
 Es gibt keine YouTube-Secrets. Ping-URLs gehören in die lokale `.env`, nicht ins Repo.
+Die `TA_*`/`TS_*`-Werte gelten nur für die Offline-Export-CLIs (`.env` bzw. `-e` im
+Container), nicht für den laufenden Dienst; token- und pfadhaltige Werte kommen nie ins Repo.
 
 ## 6. Funktionale Anforderungen
 
@@ -258,6 +263,9 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 12. Die UI zeigt die yt-dlp Version.
 13. Die Detailseite zeigt Cover und Videogalerie; Klick auf ein Video spielt die lokale Datei (Hintergrund-Klick oder ESC schließt wieder).
 14. Nachts um 0:30 liegt in `BACKUP_DIR` ein per Integritätscheck geprüftes DB-Backup und ein geprüftes tar.gz der Download-Archive, alte Kopien rotieren je Typ nach `BACKUP_KEEP`.
+15. Ein Exportlauf löscht und überschreibt nichts: zweimal hintereinander liefert denselben Stand, nur unvollständige eigene Dateien werden repariert.
+16. Ein Import übernimmt einen exportierten Baum vollständig (Zeilen und Archive entstehen, nichts wird entfernt), und ein zweiter Lauf stuft `done`/`failed` nie herunter.
+17. Export und Import laufen ohne laufende App und ohne YouTube (Quellen nur lesend) und melden Erfolg, Fehler oder Usage über die Exit-Codes 0/1/2.
 
 ## 13. Offene Punkte
 
@@ -285,9 +293,9 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - Neu: Nachtlauf mit Jitter: `SYNC_JITTER` (Default 30 Minuten) verzögert den Sync-Slot zufällig, `sync.next` zeigt die echte Zeit (siehe 6.5).
 - Neu: Die Web-UI ist einsprachig Englisch (Buttons, Spalten-Header, Badges, Leerzustände, Dialoge, `en-US`-Formate) – vorher deutsch bei bereits englischem Backend; kein i18n-Gerüst (siehe 9).
 - Neu: Platzhalter für fehlende Videos in der Videogalerie – Listing-Snapshot je Playlist in `playlist_entries` (Migration `0002`, beim Finalisieren jedes Jobs aktualisiert), `GET /videos` liefert Platzhalter-Zeilen mit Status und Grund, UI zeigt sie mit gebrochenem Video-Symbol (siehe 7, 8, 9).
-- Neu: TubeArchivist-Export als Standalone-Skript `python -m app.ta_export` (Ordnerlayout wie yt-dlp, `manifest.json`, Download-Archive, `auto|copy|hardlink`) – siehe README.
-- Neu: Offline-Import `python -m app.ta_import` liest `manifest.json`-Ordner und schreibt Playlists, `playlist_entries` und Download-Archive (append-only, nie löschend); alle importierten Playlists werden `oneshot`; `done` nur bei vollständigen Dateien, und ein Update stuft vorhandene Zustände (`done`/`failed`) nie herunter (siehe README).
-- Neu: TubeSync-Export `python -m app.ts_export` liest die TubeSync-Datenbank strikt read-only (SQLite `file:…?mode=ro`) und schreibt dasselbe Layout/`manifest.json`/Archive wie `ta_export`; gemeinsame Helfer in `app/export_common.py`. Reihenfolge über `playlist_index`, sonst `created`/`published`; `description` bleibt in TubeSync; kein Cover; Quellen ohne `source_type='p'` werden mit Warnung übersprungen (siehe README).
+- Neu: TubeArchivist-Export als Standalone-Skript `python -m app.ta_export` (Ordnerlayout wie yt-dlp, `manifest.json`, Download-Archive, `auto|copy|hardlink`) – siehe 16 (How-to: README).
+- Neu: Offline-Import `python -m app.ta_import` liest `manifest.json`-Ordner und schreibt Playlists, `playlist_entries` und Download-Archive (append-only, nie löschend); alle importierten Playlists werden `oneshot`; `done` nur bei vollständigen Dateien, und ein Update stuft vorhandene Zustände (`done`/`failed`) nie herunter (siehe 17, How-to: README).
+- Neu: TubeSync-Export `python -m app.ts_export` liest die TubeSync-Datenbank strikt read-only (SQLite `file:…?mode=ro`) und schreibt dasselbe Layout/`manifest.json`/Archive wie `ta_export`; gemeinsame Helfer in `app/export_common.py`. Reihenfolge über `playlist_index`, sonst `created`/`published`; `description` bleibt in TubeSync; kein Cover; Quellen ohne `source_type='p'` werden mit Warnung übersprungen (siehe 16, How-to: README).
 - Geändert: Discovery markiert nichts mehr als `removed` („nicht gelistet" bleibt sync); `removed` entsteht nur noch, wenn ein Sync-Lauf bestätigt, dass die Playlist weg ist – dann auch Typ `sync → oneshot`, bei Wiederkehr nur `remote_status` zurück auf `active` (siehe 6.1, 6.3).
 - Neu: Detailseite zeigt beim Playlist-Wechsel sofort einen Ladezustand statt des Inhalts der alten Playlist; ein laufender Poll verzögert den Wechsel nicht mehr bis zum nächsten Takt (siehe 9).
 - Neu: Wartungs-CLI `python -m app.forget` entfernt eine Playlist samt `playlist_entries`, `jobs`, Download-Archiven und Ordner (Quarantäne), **während die App gestoppt ist** – die einzige Ausnahme zur Regel „nie löschen" (siehe 15).
@@ -324,3 +332,78 @@ gar nichts. Exit-Codes wie bei `ta_import`: `0` in Ordnung, `1` verweigert/fehlg
 die DB-Einträge, Archive oder Ordner entfernt. Sie ist manuell, läuft nur gegen eine
 gestoppte App, ist standardmäßig ein Trockenlauf und legt vorher ein Backup an – niemals
 Teil eines Laufzeitpfads.
+
+## 16. Offline-Export (`app.ta_export`, `app.ts_export`)
+
+`python -m app.ta_export` und `python -m app.ts_export` holen eine fremde Bibliothek
+(TubeArchivist bzw. TubeSync) ins eigene Ordnerlayout, ohne die App, ihre Datenbank oder
+YouTube anzufassen. Beide sind reine Skripte ohne DB-Zugriff und ohne Laufzeitpfad
+(gleiche Einordnung wie `forget`, 15), der gemeinsame Kern liegt in `app/export_common.py`.
+
+**Quellen (nur lesend):**
+
+- TubeArchivist: REST-API mit Token (`TA_API_URL`, `TA_API_TOKEN`), seitig paginiert;
+  `TA_API_HOST` überschreibt den Host-Header für Deployments, die den URL-Host ablehnen.
+  Die API-Adresse `media_url` zeigt nach `<media>/…`, auf der Platte liegt die Datei unter
+  `media/…` – gematcht wird über die Video-ID.
+- TubeSync: `config/db.sqlite3` ausschließlich als `file:…?mode=ro`, Tabellen
+  `sync_source`, `sync_media`, `sync_media_metadata`; Quellen ohne `source_type='p'`
+  werden übersprungen und im Report gewarnt.
+
+**Ziel pro Playlist:** Ordner `<sanitizter Titel> [<playlist_id>]/` (dasselbe Format wie
+beim Download), Dateien `NN - <Titel> [<video_id>].<ext>` mit Sidecars gleichen Stems
+(`.info.json`, `.description`, Thumb-JPG, bei TubeArchivist zusätzlich Cover),
+`manifest.json` (Playlist- und Video-IDs, Positionen, Titel, Dauer, Datum, Dateiname –
+Grundlage für den Import, 17) und `archives/<playlist_id>.txt` (append-only, nur für
+Videos mit vorhandener Mediendatei).
+
+**Regeln:**
+
+- Reihenfolge der Einträge: `playlist_index`, sonst `created`/`published` (TubeSync
+  speichert die Playlist-Position in der Regel nicht).
+- Platzierung `--mode auto|copy|hardlink`: `auto` versucht den Hardlink und fällt bei
+  `OSError` (Mount-Grenzen) auf Kopie zurück – beide Varianten sind zulässig, der Report
+  weist sie aus.
+- Schreiben atomar über `<name>.part` + Rename. Eine vorhandene Zieldatei wird **nie**
+  überschrieben, sondern verglichen (Größe) und bei Abweichung repariert; ein zweiter
+  Lauf ist idempotent.
+- An der Quelle wird nichts gelöscht, nichts umbenannt, nichts geschrieben.
+- `description` von TubeSync bleibt dort (die Galerie liest sie nicht), der TubeSync-Export
+  schreibt kein Cover.
+- Konfiguration über CLI-Flags oder ENV (5); Beispiele und Container-Lauf stehen im README.
+
+**Gemeinsame Flags:** `--mode`, `--metadata-only` (nur Sidecars, Manifest, Archive),
+`--dry-run` (gar nichts schreiben, nur Report), `--playlist <id>` (Teil-Lauf),
+`--no-archives`, `-q`, `--env-file` sowie die Quell-Flags
+(`--url/--token/--host-header/--media-root/--target`, `--db/--media-root/--thumbs-root/
+--target`), die ihre ENV-Werte überschreiben.
+
+**Exit-Codes:** `0` in Ordnung, `1` bei Fehlern, `2` bei fehlender Konfiguration oder
+`TsError`.
+
+## 17. Offline-Import (`app.ta_import`)
+
+`python -m app.ta_import` übernimmt einen exportierten Baum (16) in die App-DB. Er läuft
+**nur gegen die gestoppte App** (exklusiver DB-Zugriff), ändert Schema, API und UI nicht
+und ist neben `backup` und `forget` (15) die einzige Schreibstelle außerhalb der Laufzeit.
+
+**Regeln:**
+
+- Quelle ist ein Verzeichnis mit `manifest.json` je Playlist (Default `DATA_DIR`,
+  `--source`); die Auswahl `--playlist <id>` (Allow-Liste) gewinnt über `--skip`.
+- Je Playlist ein Upsert von `playlists` und `playlist_entries`: `reason`/`unavailable`
+  aus früheren YouTube-Läufen bleiben unangetastet, Zeilen werden nie entfernt.
+- Alle importierten Playlists werden `oneshot` mit `remote_status=active`;
+  `folder_name` ist der tatsächlich vorhandene Ordner.
+- `state=done` nur, wenn jede Manifest-Eintragung eine lokale Datei hat, sonst `idle`.
+  Ein erneuter Lauf („Update") stuft vorhandene Zustände (`done`, `failed`) **nie** herunter.
+- Counts und `size_bytes` werden nur geschrieben, wenn der Ordner existiert;
+  `remote_status` wird nie zurückgesetzt.
+- Die Download-Archive werden aus dem lokal vorhandenen Bestand ergänzt (`append_archive`,
+  append-only; `--no-archives` schaltet das ab) – die `archives/`-Dateien des Exports
+  werden nicht umgekopiert.
+- Quelldateien werden nur gelesen, nichts gelöscht; `--dry-run` schreibt nichts, nur den
+  Report.
+
+**Exit-Codes:** wie 15/16 – `0` in Ordnung, `1` bei Fehlern, `2` bei fehlender Quelle
+oder Datenbankproblem.

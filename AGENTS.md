@@ -139,7 +139,7 @@ steht – das gilt für jede weitere Bearbeitung:
 
 | Datei | Wofür | Rein | Niemals rein |
 |---|---|---|---|
-| `SPEC.md` | Quelle der Wahrheit für **Verhalten** (normativ, deutsch): Zweck, Anforderungen, ENV, API, Datenmodell, Abnahme, §14 Changelog (anfügen, nichts strichen), §15 Regel-Ausnahmen, technische Offene Punkte | jede Verhaltensänderung, dazu Migration und Test | How-to, Begründungen, Status/Checklisten |
+| `SPEC.md` | Quelle der Wahrheit für **Verhalten** (normativ, deutsch): Zweck, Anforderungen, ENV, API, Datenmodell, Abnahme, §14 Changelog (anfügen, nichts strichen), §15 Regel-Ausnahme (`forget`), §16/§17 Offline-Export/Import, technische Offene Punkte | jede Verhaltensänderung, dazu Migration und Test | How-to, Begründungen, Status/Checklisten |
 | `README.md` | Nutzer & Betreiber (englisch): Quick start, Konfiguration, Volumes, Backup/Restore, Export/Import/Forgetting, Projektstruktur | Bedienanleitungen, ENV-Spalten, Deployment-Hinweise | interne Entscheidungen, Spezifikationstexte, TODOs |
 | `AGENTS.md` | Regeln und Orientierung für die Arbeit am Code (diese Datei): Architektur, Befehle, Test-/Lint-Pflichten, harte Regeln, CI/CD, diese Dokumentationskarte | was vor dem ersten Eingriff gelten muss | Status, Changelog, Nutzeranleitung |
 | `PLAN.md` | Status & Warum: Umsetzungsstand (Testzahlen), **Entscheidungslog** (append-only: Begründung, Alternative, Warum-gegen-um), priorisierte offene Punkte, Regeln für den Agenten | neue Entscheidungen, neue offene Punkte – bestehende Einträge nicht löschen | Verhalten (→ `SPEC.md`), How-to (→ `README.md`), erledigte Phasen-Checklisten |
