@@ -76,8 +76,8 @@ def make_ts(root: Path) -> Path:
     conn.executemany(
         "INSERT INTO sync_source (uuid, source_type, key, name, directory) VALUES (?, ?, ?, ?, ?)",
         [
-            ("s1", "p", "PL1", "<P5>", "<metal>"),
-            ("s2", "p", "PL2", "<P7>", "psychrock"),
+            ("s1", "p", "PL1", "Metal Mix", "metal"),
+            ("s2", "p", "PL2", "Psych Rock", "psychrock"),
             ("s3", "c", "@channel", "Channel Stuff", "channel"),
         ],
     )
@@ -140,7 +140,7 @@ def paths_of(root: Path) -> dict[str, Path]:
     }
 
 
-def folder_of(tmp_path: Path, title: str = "<P5>", pid: str = "PL1") -> Path:
+def folder_of(tmp_path: Path, title: str = "Metal Mix", pid: str = "PL1") -> Path:
     return tmp_path / "out" / sanitize_folder_name(title, pid)
 
 
@@ -187,9 +187,9 @@ def test_read_library_orders_and_merges_metadata(tmp_path):
         conn.close()
 
     assert [(s.playlist_id, s.title, s.source_type) for s in sources] == [
-        ("PL1", "<P5>", "p"),
         ("@channel", "Channel Stuff", "c"),
-        ("PL2", "<P7>", "p"),
+        ("PL1", "Metal Mix", "p"),
+        ("PL2", "Psych Rock", "p"),
     ]
     assert [m.video_id for m in library["PL1"]] == ["vid1", "vid2", "vid3"]
     # playlist_index wins over the order TubeSync crawled the videos in
@@ -274,8 +274,8 @@ def test_export_manifest_holds_db_import_data(tmp_path):
     manifest = json.loads((folder_of(tmp_path) / "manifest.json").read_text())
     assert manifest["source"] == "tubesync"
     assert manifest["playlist_id"] == "PL1"
-    assert manifest["title"] == "<P5>"
-    assert manifest["folder_name"] == sanitize_folder_name("<P5>", "PL1")
+    assert manifest["title"] == "Metal Mix"
+    assert manifest["folder_name"] == sanitize_folder_name("Metal Mix", "PL1")
     assert manifest["channel"] == ""
     assert [row["position"] for row in manifest["entries"]] == [1, 2, 3]
     assert manifest["entries"][0]["file"] == "01 - First Song [vid1].mkv"
@@ -285,7 +285,7 @@ def test_export_manifest_holds_db_import_data(tmp_path):
 def test_export_playlist_index_wins_over_crawl_order(tmp_path):
     root = make_ts(tmp_path)
     export(root, tmp_path, mode="copy")
-    folder = folder_of(tmp_path, title="<P7>", pid="PL2")
+    folder = folder_of(tmp_path, title="Psych Rock", pid="PL2")
     names = sorted(os.listdir(folder))
     assert "01 - Crawled second [vid9].mkv" in names
     assert "02 - Crawled first [vid8].mkv" in names
@@ -398,7 +398,7 @@ def test_build_info_json_falls_back_to_media_row(tmp_path):
     finally:
         conn.close()
     media = next(m for m in library["PL1"] if m.video_id == "vid3")
-    source = ts.TsSource(playlist_id="PL1", title="<P5>", directory="d", source_type="p")
+    source = ts.TsSource(playlist_id="PL1", title="Metal Mix", directory="d", source_type="p")
     info = ts.build_info_json(media, source, 3, ".mkv")
     assert info["title"] == "Never Downloaded"
     assert info["duration"] == 50
@@ -442,7 +442,7 @@ def test_cli_reports_the_table(tmp_path, capsys, monkeypatch):
     ])
     out = capsys.readouterr().out
     assert code == 0
-    assert "<P5>" in out and "linked=0" in out
+    assert "Metal Mix" in out and "linked=0" in out
     assert "failed=0" in out and "dry-run" not in out
 
 
@@ -481,8 +481,8 @@ def test_export_tree_imports_into_the_database(tmp_path):
     with session_scope() as s:
         pl = s.scalar(select(Playlist).where(Playlist.playlist_id == "PL1"))
         assert (pl.type, pl.state, pl.remote_status) == ("oneshot", "idle", "active")
-        assert pl.title == "<P5>"
-        assert pl.folder_name == sanitize_folder_name("<P5>", "PL1")
+        assert pl.title == "Metal Mix"
+        assert pl.folder_name == sanitize_folder_name("Metal Mix", "PL1")
         assert (pl.remote_item_count, pl.downloaded_count) == (3, 2)
         rows = s.scalars(
             select(PlaylistEntry).where(PlaylistEntry.playlist_id == pl.id)

@@ -13,7 +13,7 @@ def test_is_oneshot_variants():
 
 def test_is_oneshot_multiple_keywords():
     kw = "setlist,concert"
-    assert is_oneshot("<Beispiel Concert 2024>", kw)
+    assert is_oneshot("Beispiel Concert 2024", kw)
     assert is_oneshot("Band Setlist Night", kw)
     assert is_oneshot("open CONCERT air", kw)
     assert not is_oneshot("Sommer Mix", kw)

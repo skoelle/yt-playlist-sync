@@ -22,7 +22,7 @@ services:
     volumes:
       - /srv/docker/yt-playlist-sync/config:/config   # local disk, NOT NFS (SQLite)
       - /srv/docker/yt-playlist-sync/backup:/backup   # nightly backups (database + download archives)
-      - <nas>/media/yt-playlists:/data             # example path of the target share
+      - /mnt/share/yt-playlists:/data             # example path of the target share
     ports:
       - "8048:8048"
     labels:
@@ -71,6 +71,6 @@ services:
   #     PGID: "1000"
   #   volumes:
   #     - /srv/docker/yt-playlist-sync/config:/config   # database + archives live here
-  #     - <nas>/media/yt-playlists:/data             # playlist folders (with manifest.json)
+  #     - /mnt/share/yt-playlists:/data             # playlist folders (with manifest.json)
   #     - /srv/export:/export:ro                        # optional: scan before moving folders
   #   command: ["python", "-m", "app.ta_import", "--source", "/export", "--dry-run"]
