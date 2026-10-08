@@ -1,107 +1,22 @@
 # PLAN: yt-playlist-sync
 
-Umsetzungsplan mit Status. Grundlage ist `SPEC.md`. Abweichungen stehen im Entscheidungslog am Ende und in SPEC Abschnitt 14.
+Status- und Entscheidungsdokument. Grundlage ist `SPEC.md`. Abweichungen stehen im Entscheidungslog am Ende und in SPEC Abschnitt 14.
 
 ## Umsetzungsstatus
 
-- **Abgeschlossen:** alle Phasen abgenommen (0 bis 6), `pytest -q` = **164 grün**, `ruff check .` sauber, `node --check` ok, CI-Lauf inklusive. Zusätzlich: TubeArchivist- und TubeSync-Export (CLI), Offline-DB-Import (`ta_import`) inkl. der geänderten Gone-Regel, Wartungs-CLI `forget` (einzige dokumentierte Ausnahme der Regel „nie löschen").
+- **Abgeschlossen:** App-Stand laut `SPEC.md` §14 (u. a. Gone-Regel, Playlist-Galerie mit Platzhaltern, englische UI), TubeArchivist- und TubeSync-Export als CLI (`ta_export`, `ts_export`), Offline-DB-Import `ta_import`, Wartungs-CLI `forget` (einzige dokumentierte Ausnahme der Regel „nie löschen"). `pytest -q` = **164 grün**, `ruff check .` sauber, `node --check` ok, CI-Lauf inklusive.
 - **Offene Tests (niedrige Prio):** Healthchecks-Mock, Cron-Berechnung/Zeitumstellung, Docker-Laufzeittests.
+- **Offenes Feature (Entwurf, nicht gebaut):** manuelles Eintragen von Playlists → `MANUAL-PLAYLIST.md`.
 
 ## Regeln für den Agenten
 
-1. Phasen der Reihe nach abarbeiten, Abnahme vor der nächsten Phase.
-2. Pro Phase ein Commit mit Präfix `phase-N:`.
+1. Änderungen in kleinen, eigenen Commits mit sachlichem Präfix (`feat:`, `fix:`, `docs:`, `test:`).
+2. Eine Änderung nach der anderen – vor dem nächsten Schritt `ruff check .` und `pytest -q` laufen lassen.
 3. Öffentliches Repo: keine echten Kanal-Handles, Healthchecks-UUIDs, Hostnamen, IPs oder Pfade. `.env` ist in `.gitignore`.
 4. Im Produktcode niemals Dateien oder Archive-Einträge löschen.
 5. Tests nutzen den Stub `tests/fixtures/fake_ytdlp.py`, kein Netzwerk.
 6. Linux-Beispiele mit `vim`, nie `nano`.
 7. Code, Kommentare, README: Englisch. PLAN.md und SPEC.md: Deutsch.
-
-## Phase 0: Repo-Grundgerüst
-
-- [x] `LICENSE` (MIT), `.gitignore`, `.dockerignore`
-- [x] `README.md` (Englisch)
-- [x] `SPEC.md` an Änderungen angepasst
-- [x] `requirements.txt`, `requirements-dev.txt`, `pyproject.toml`
-- [x] `.github/workflows/test.yml`
-
-Abnahme: Abhängigkeiten installierbar, `ruff check .` und `pytest -q` grün, Test-Workflow grün. **Erfüllt (48 Tests grün, build.yml lief bis zum Push).**
-
-## Phase 1: Config, Datenbank, Healthz
-
-- [x] `app/config.py` (alle ENV, Validierung von Cron, Zeitzone, Sleep)
-- [x] `app/db.py` (Engine, SQLite WAL, Session-Scope, Alembic-Aufruf)
-- [x] `app/models.py` (`playlists`, `jobs`, `runs`)
-- [x] Alembic `0001_initial`
-- [x] `app/main.py` mit Lifespan und `/healthz`
-- [x] `tests/test_config.py`
-
-Abnahme: Start legt `app.db` an, `/healthz` liefert 200. **Erfüllt (Container läuft produktiv, Healthcheck grün).**
-
-## Phase 2: Discovery und Typbestimmung
-
-- [x] `app/ytdlp.py` Listing, URL-Bildung, Parser
-- [x] `app/paths.py` Sanitizing und Typbestimmung
-- [x] `app/discovery.py` (neu, bekannt, removed, `runs`, Schutz vor leerer Liste)
-- [x] `tests/fixtures/fake_ytdlp.py`
-- [x] Tests: Typbestimmung, Sanitizing, Discovery mit DB (grün)
-
-Abnahme: manuell gegen echten Kanal mit `DRY_RUN=1`. **Teilweise.**
-
-## Phase 3: Download-Runner und Queue
-
-- [x] Kommandoaufbau, Ausgabeparser, Abschlusskriterium (`ytdlp.py`)
-- [x] `app/runner.py` (Subprozess, Abbruch, Rate-Limit)
-- [x] `app/jobqueue.py` (ein Worker, Prioritäten, Recovery, Cancel, Rate-Limit-Pause)
-- [x] Oneshot-Regeln (`done`, `failed`, nie wieder automatisch)
-- [x] Runner-Tests: Erfolg, zweiter Lauf, Teilfehler und Retry, unavailable, Dry-Run, Rate-Limit, Abbruch, Listing-Fehler (grün)
-- [x] Queue-Tests: Oneshot nicht erneut, Retry, Priorität, Cancel (grün)
-- [x] Test "nie zwei Jobs gleichzeitig" (Stub mit `slow`, nie mehr als ein `running`)
-- [x] Neustart-Simulation (`recover()`: interrupted → requeued, States, kein doppelter Lauf)
-
-Abnahme: manuell mit echter Test-Playlist. **Teilweise.**
-
-## Phase 4: Scheduler und Healthchecks
-
-- [x] `app/healthchecks.py`
-- [x] `app/scheduler.py` (Discovery, Nachtsync, yt-dlp-Update, Startlauf, Log-Cleanup)
-- [x] Nachtliches DB-Backup 0:30 (`app/backup.py`, sqlite3-Backup-API, `BACKUP_DIR`/`BACKUP_KEEP`)
-- [x] Download-Archive im Nachtbackup (`backup_archives`: tar.gz von `archives/`, eigene Rotation, Integritätscheck durch Einlesen)
-- [x] Discovery-Skip bei lauter Queue (`discovery_job(force=False)`: überspringt, solange Jobs queued/running, HC success `skipped: queue busy`; manueller Button mit `force=True` läuft immer)
-
-Abnahme: Discovery läuft per Cron, `runs` korrekt. **Erfüllt (stündliche Discovery im laufenden Container).**
-
-## Phase 5: REST-API und Web UI
-
-- [x] `app/api.py` (alle Endpunkte aus SPEC 8)
-- [x] `index.html`, `app.js`, `style.css` (3 Tabs, Polling, kein Reload, Log-Panel, Sortierung)
-- [x] Detailseite (`GET /api/playlists/{id}`, `/files`, Hash `#playlist-{id}`, Titel-Links, globales Log-Panel)
-- [x] Detailseite: Cover + Videogalerie (`read_video_entries` mit info.json-Parse-Cache, `/thumb`-Endpunkt)
-- [x] Lokaler Player: `/video`-Stream (Range) + Lichtbox mit Playlist-Navigation
-- [x] Technische Video-Metadaten in der Galerie (Auflösung, Größe, Codecs, Bitrate aus der `.info.json`, Helper `_resolution`/`_codec`/`_bitrate`)
-- [x] `tests/test_api.py` (läuft: 48 Tests grün, inkls. Detailseite, `/thumb`, `/video`-Stream mit Range)
-- [x] Test Log-Offset (Volltext, Nachschub, past-end, 422, `finished`)
-
-Abnahme: im Browser prüfen (Stub oder `DRY_RUN`). **Erfüllt (UI manuell geprüft: Detailseite, Player, Metadaten).**
-
-## Phase 6: Docker-Image, GitHub Action, README
-
-- [x] `Dockerfile`, `docker-entrypoint.sh`
-- [x] `docker-compose.example.yml`, `.env.example` (nur Platzhalter)
-- [x] `build.yml` (amd64, nur `latest`, wöchentlich ohne Cache, ruft vorher die Tests auf)
-- [x] `README.md` (Englisch)
-- [x] `docker build` (build.yml lief, Image steht auf GHCR)
-- [x] Laufzeitchecks im Container (läuft >2 h produktiv: yt-dlp, ffmpeg, Nicht-Root, `PUID`/`PGID`)
-- [x] Erster Workflow-Lauf, GHCR-Package auf "public" gestellt
-
-Abnahme: Image `latest` auf GHCR, ohne Login pullbar. **Erfüllt (public).**
-
-## Definition of Done
-
-- [x] Phasen 0 bis 6 vollständig abgenommen
-- [x] Image `latest` auf GHCR, öffentlich, amd64
-- [x] README (Englisch), LICENSE (MIT), SPEC.md und PLAN.md im Repo
-- [x] Keine privaten Daten im Repo (Platzhalter `example-user`, `@beispielkanal`)
 
 ## Entscheidungslog
 
