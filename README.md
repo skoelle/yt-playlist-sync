@@ -324,7 +324,7 @@ DATA_DIR=./.dev/data CONFIG_DIR=./.dev/config DRY_RUN=1 YOUTUBE_CHANNEL=@yourcha
 
 Dependency updates arrive as weekly Renovate PRs (Mondays before 6 am, minor/patch merged automatically).
 
-See [SPEC.md](SPEC.md) for the specification, [PLAN.md](PLAN.md) for the implementation plan and [AGENTS.md](AGENTS.md) for the working rules.
+See [SPEC.md](SPEC.md) for the specification (behaviour, the source of truth), [PLAN.md](PLAN.md) for status and the decision log, [IMPORT-FEATURE.md](IMPORT-FEATURE.md) for the import/export design record and [AGENTS.md](AGENTS.md) for the working rules plus the map that says which kind of content belongs in which file.
 
 ## 📁 Project structure
 
@@ -346,7 +346,7 @@ migrations/                  Alembic schema migrations
 tests/                       pytest suite; fixtures/fake_ytdlp.py is the network-free stub
 .github/workflows/           test.yml (ruff + pytest), build.yml (weekly amd64 image)
 renovate.json                weekly dependency update schedule
-SPEC.md / PLAN.md / AGENTS.md  specification, implementation status, working rules
+SPEC.md / PLAN.md / IMPORT-FEATURE.md / AGENTS.md  specification, status + decisions, design record, working rules
 ```
 
 ## 📜 License

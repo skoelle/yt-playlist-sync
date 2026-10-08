@@ -9,7 +9,7 @@
 - Genau ein Download-Job zur selben Zeit, Pausen zwischen Videos, nie löschen.
 - Kein Google-Login, keine API-Keys, kein Login in der App.
 
-**Sprachregel:** Code, Kommentare, Tests, README auf Englisch. `SPEC.md` und `PLAN.md` auf Deutsch. Diese Datei: Deutsch. **UI-Texte (HTML/JS) sind Englisch** – kein i18n-Gerüst, keine deutschen Strings in `app/static/`; Wächter-Test `test_ui_is_english`.
+**Sprachregel:** Code, Kommentare, Tests, README auf Englisch. `SPEC.md`, `PLAN.md` und `IMPORT-FEATURE.md` auf Deutsch. Diese Datei: Deutsch. **UI-Texte (HTML/JS) sind Englisch** – kein i18n-Gerüst, keine deutschen Strings in `app/static/`; Wächter-Test `test_ui_is_english`.
 
 ## Architektur
 
@@ -134,9 +134,21 @@ Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
 ## Dokumentation und Stand
 
-- `SPEC.md` = Spezifikation und Quelle der Wahrheit für Verhalten, ENV-Tabelle, API, Datenmodell. Bei Verhaltensänderung **immer** SPEC (und bei Bedarf README) mitpflegen.
-- `PLAN.md` = Umsetzungsstatus, Phasen, Entscheidungslog. Offene Punkte dort fortschreiben statt bestehende Einträge löschen.
-- `README.md` = Nutzerdoku (Englisch), Quick start, ENV-Tabelle, Volumes, Backup/Restore, Projektstruktur.
+Jede Dokumentationsdatei hat einen festen Zweck. Inhalte dorthin legen, wo der Zweck
+steht – das gilt für jede weitere Bearbeitung:
+
+| Datei | Wofür | Rein | Niemals rein |
+|---|---|---|---|
+| `SPEC.md` | Quelle der Wahrheit für **Verhalten** (normativ, deutsch): Zweck, Anforderungen, ENV, API, Datenmodell, Abnahme, §14 Changelog (anfügen, nichts strichen), §15 Regel-Ausnahmen, technische Offene Punkte | jede Verhaltensänderung, dazu Migration und Test | How-to, Begründungen, Status/Checklisten |
+| `README.md` | Nutzer & Betreiber (englisch): Quick start, Konfiguration, Volumes, Backup/Restore, Export/Import/Forgetting, Projektstruktur | Bedienanleitungen, ENV-Spalten, Deployment-Hinweise | interne Entscheidungen, Spezifikationstexte, TODOs |
+| `AGENTS.md` | Regeln und Orientierung für die Arbeit am Code (diese Datei): Architektur, Befehle, Test-/Lint-Pflichten, harte Regeln, CI/CD, diese Dokumentationskarte | was vor dem ersten Eingriff gelten muss | Status, Changelog, Nutzeranleitung |
+| `PLAN.md` | Status & Warum: Umsetzungsstand (Testzahlen), **Entscheidungslog** (append-only: Begründung, Alternative, Warum-gegen-um), priorisierte offene Punkte, Regeln für den Agenten | neue Entscheidungen, neue offene Punkte – bestehende Einträge nicht löschen | Verhalten (→ `SPEC.md`), How-to (→ `README.md`), erledigte Phasen-Checklisten |
+| `IMPORT-FEATURE.md` | Designdokument des Import-/Export-Features: Ziele, bestätigte Entscheidungen, Risiken. Fertig = zusammen geschnitten | Entwürfe und Phasen, solange die Baustelle offen ist | erledigte Phasen, veraltete Stände (zusammenschneiden, danach Verweis auf SPEC/README) |
+
+Nicht ins Repo: persönliche Lauf- und Migrationsprotokolle (welche Playlist wann
+übernommen wurde), echte Pfade, IDs oder Titel aus den eigenen Datenbeständen – sie
+gehören ins Arbeitsprotokoll, nicht ins Werkzeug.
+
 - Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (164), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
