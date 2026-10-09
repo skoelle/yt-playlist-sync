@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import shutil
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -30,8 +31,13 @@ class AppScheduler:
         self.settings = settings
         self.queue = queue
         self.ytdlp_version = "unknown"
+        self.ytdlp_updating = False
         self.scheduler = AsyncIOScheduler(timezone=settings.tzinfo)
         self._update_lock = asyncio.Lock()
+
+    def is_ytdlp_updating(self) -> bool:
+        """True while the yt-dlp library is being replaced (SPEC 6.7)."""
+        return self.ytdlp_updating
 
     def _cron_trigger(self, expr: str, jitter_minutes: int) -> CronTrigger:
         """Cron trigger with a random 0..jitter delay after each slot (from_crontab has no jitter)."""
@@ -97,6 +103,11 @@ class AppScheduler:
 
     async def discovery_job(self, force: bool = False) -> None:
         url = self.settings.hc_discovery_url
+        if self.ytdlp_updating:
+            # yt-dlp is mid-swap: even a forced run would import a half-written library.
+            log.info("discovery skipped: yt-dlp update in progress")
+            await ping(url, "success", "skipped: updating")
+            return
         if not force and not self.queue.is_idle():
             log.info("discovery skipped: queue busy (jobs queued/running)")
             await ping(url, "success", "skipped: queue busy")
@@ -151,7 +162,6 @@ class AppScheduler:
         await self.update_ytdlp(wait_for_idle=False)
 
     async def update_ytdlp(self, wait_for_idle: bool) -> None:
-        s = self.settings
         if wait_for_idle:
             for _ in range(180):
                 if self.queue.is_idle():
@@ -161,24 +171,50 @@ class AppScheduler:
                 log.warning("queue stayed busy, skipping yt-dlp update")
                 return
         async with self._update_lock:
-            lib = s.config_dir / "ytdlp-lib"
-            # pip --target reinstalls (and reports "Successfully installed") on every
-            # run, so the effective version decides whether the cache went stale.
-            before = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
+            # Flag covers the whole swap: queue and discovery stay out of the library
+            # while pip writes and the symlink flips (SPEC 6.7).
+            self.ytdlp_updating = True
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    *ytdlp.build_update_command(lib),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-                )
-                out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
-                if proc.returncode != 0:
-                    log.warning("yt-dlp update failed: %s", out.decode(errors="replace")[-300:])
-            except Exception as exc:  # noqa: BLE001
-                log.warning("yt-dlp update failed: %s", exc)
-            self.ytdlp_version = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
-            log.info("yt-dlp version: %s", self.ytdlp_version)
-            if self.ytdlp_version != before:
-                await self.clear_ytdlp_cache()
+                await self._update_ytdlp_locked()
+            finally:
+                self.ytdlp_updating = False
+
+    async def _update_ytdlp_locked(self) -> None:
+        s = self.settings
+        staging = ytdlp.staging_lib_dir(s.config_dir)
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        before = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
+        self.ytdlp_version = before
+        ok = False
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *ytdlp.build_update_command(staging),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=300)
+            if proc.returncode != 0:
+                log.warning("yt-dlp update failed: %s", out.decode(errors="replace")[-300:])
+            else:
+                ok = True
+        except Exception as exc:  # noqa: BLE001
+            log.warning("yt-dlp update failed: %s", exc)
+        if not ok:
+            shutil.rmtree(staging, ignore_errors=True)
+            log.info("yt-dlp version: %s (unchanged)", self.ytdlp_version)
+            return
+        # Version of the staged install (PYTHONPATH=staging shadows the live copy),
+        # then park it under its version and flip the symlink atomically.
+        version = await ytdlp.get_version(s.ytdlp_bin, ytdlp.lib_env(s.config_dir, staging))
+        final = ytdlp.versioned_lib_dir(s.config_dir, version)
+        if final.exists():
+            shutil.rmtree(final, ignore_errors=True)
+        staging.rename(final)
+        ytdlp.swap_ytdlp_lib(s.config_dir, final)
+        self.ytdlp_version = await ytdlp.get_version(s.ytdlp_bin, ytdlp.ytdlp_env(s.config_dir))
+        log.info("yt-dlp version: %s", self.ytdlp_version)
+        if self.ytdlp_version != before:
+            await self.clear_ytdlp_cache()
 
     async def clear_ytdlp_cache(self) -> None:
         """Drop cached signatures/challenge values after an update (SPEC 6.7)."""

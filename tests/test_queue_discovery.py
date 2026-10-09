@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
 import asyncio
+import sys
 
 import pytest
 
@@ -13,6 +14,7 @@ from datetime import datetime, timezone  # noqa: E402
 
 from sqlalchemy import select  # noqa: E402
 
+from app import ytdlp  # noqa: E402
 from app.config import Settings, ensure_dirs  # noqa: E402
 from app.db import init_engine, migrate, session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery, run_discovery  # noqa: E402
@@ -505,3 +507,87 @@ def test_listing_forbidden_keeps_sync_and_active(cfg, stub):
 
     asyncio.run(scenario())
     assert playlists()["PL403"][:3] == ("sync", "failed", "active")
+
+
+def test_queue_waits_while_ytdlp_updating(cfg, stub):
+    """Queue-Gate: kein Job-Start solange die yt-dlp-Bibliothek getauscht wird (SPEC 6.7)."""
+    apply_discovery([PlaylistInfo("PLaaa", "Sommer Mix")], "setlist")
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id))
+    queue = JobQueue(cfg)
+    flag = {"on": True}
+    queue.is_ytdlp_updating = lambda: flag["on"]
+    jid = queue.enqueue(pk, "manual")
+
+    async def scenario():
+        await queue.start()
+        await asyncio.sleep(0.5)
+        still_waiting = queue.is_idle() is False and queue.current_job_id is None
+        flag["on"] = False
+        await queue.wait_for_jobs([jid], poll=0.2)
+        await queue.stop()
+        return still_waiting
+
+    assert asyncio.run(scenario()) is True
+    with session_scope() as s:
+        assert s.get(Job, jid).status == "success"
+
+
+def test_discovery_skipped_while_ytdlp_updating(cfg, monkeypatch):
+    """Auch force=True bleibt draußen, solange yt-dlp getauscht wird (SPEC 6.7)."""
+    pings = record_pings(monkeypatch)
+    queue = JobQueue(cfg)
+    sched = AppScheduler(cfg, queue)
+    sched.ytdlp_updating = True
+    asyncio.run(sched.discovery_job(force=True))
+    assert pings == [("success", "skipped: updating")]
+    assert discovery_runs() == []
+
+
+def _failing_pip(lib):
+    return [sys.executable, "-c", "import sys; print('boom'); sys.exit(1)"]
+
+
+def test_update_failure_keeps_old_install(cfg, monkeypatch):
+    """pip-Abbruch: kein Swap, alte Installation bleibt, Flag fällt zurück (SPEC 6.7)."""
+    old = cfg.config_dir / "ytdlp-lib"
+    old.mkdir(parents=True)
+    (old / "marker.txt").write_text("old")
+    monkeypatch.setattr("app.ytdlp.build_update_command", _failing_pip)
+    queue = JobQueue(cfg)
+    sched = AppScheduler(cfg, queue)
+    asyncio.run(sched.update_ytdlp(wait_for_idle=False))
+    assert sched.ytdlp_updating is False
+    assert old.is_dir() and not old.is_symlink()
+    assert (old / "marker.txt").read_text() == "old"
+    assert not ytdlp.staging_lib_dir(cfg.config_dir).exists()
+
+
+def test_update_success_swaps_symlink(cfg, monkeypatch):
+    """Erfolgreicher Update: staging → versioniertes Verzeichnis → atomarer Symlink,
+    der alte Stand parkt als ytdlp-lib.prev (SPEC 6.7)."""
+    old = cfg.config_dir / "ytdlp-lib"
+    old.mkdir(parents=True)
+    (old / "marker.txt").write_text("old")
+
+    def fake_cmd(lib):
+        return [
+            sys.executable, "-c",
+            "import sys, pathlib; d = pathlib.Path(sys.argv[1]); d.mkdir(parents=True); "
+            "(d / 'marker.txt').write_text('new')",
+            str(lib),
+        ]
+
+    monkeypatch.setattr("app.ytdlp.build_update_command", fake_cmd)
+    queue = JobQueue(cfg)
+    sched = AppScheduler(cfg, queue)
+    asyncio.run(sched.update_ytdlp(wait_for_idle=False))
+    link = cfg.config_dir / "ytdlp-lib"
+    assert link.is_symlink()
+    assert (link / "marker.txt").read_text() == "new"
+    prev = cfg.config_dir / "ytdlp-lib.prev"
+    assert (prev / "marker.txt").read_text() == "old"
+    assert not ytdlp.staging_lib_dir(cfg.config_dir).exists()
+    # stub reports 2099.01.01 via --version, unchanged before/after -> no cache clear
+    assert sched.ytdlp_version == "2099.01.01"
+    assert sched.ytdlp_updating is False

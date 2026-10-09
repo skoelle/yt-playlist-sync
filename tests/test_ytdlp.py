@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Stefan Koelle (https://stefankoelle.de)
 # Licensed under the MIT License. See LICENSE file in project root for details.
+import os
 from pathlib import Path
 
 from app import ytdlp
@@ -114,11 +115,11 @@ def test_build_command():
 
 
 def test_build_update_command():
-    cmd = ytdlp.build_update_command("/config/ytdlp-lib")
+    cmd = ytdlp.build_update_command("/config/ytdlp-libs/.staging")
     # the default extra is required: yt-dlp-ejs hangs on it and must be updated too
     assert cmd[-1] == "yt-dlp[default]" and "yt-dlp" not in cmd[:-1]
     assert "--upgrade" in cmd and "--target" in cmd
-    assert cmd[cmd.index("--target") + 1] == "/config/ytdlp-lib"
+    assert cmd[cmd.index("--target") + 1] == "/config/ytdlp-libs/.staging"
 
 
 def test_build_cache_clear_command():
@@ -211,3 +212,61 @@ def test_append_archive_is_additive(tmp_path):
     assert ytdlp.append_archive(p, ["vidD"], dry_run=True) == 1
     assert p.read_text().count("vidD") == 0
     assert ytdlp.read_archive(p) == {"vidA", "vidB", "vidC"}
+
+
+def test_lib_env_puts_staging_first(tmp_path):
+    env = ytdlp.lib_env(tmp_path, tmp_path / "ytdlp-libs" / ".staging")
+    parts = env["PYTHONPATH"].split(os.pathsep)
+    assert parts[0] == str(tmp_path / "ytdlp-libs" / ".staging")
+
+
+def test_versioned_and_staging_lib_dirs(tmp_path):
+    assert ytdlp.staging_lib_dir(tmp_path) == tmp_path / "ytdlp-libs" / ".staging"
+    assert ytdlp.versioned_lib_dir(tmp_path, "2025.10.08") == tmp_path / "ytdlp-libs" / "yt-dlp-2025.10.08"
+    # versions are sanitized so a hostile string cannot escape the directory
+    assert ytdlp.versioned_lib_dir(tmp_path, "../etc").name == "yt-dlp-etc"
+
+
+def test_swap_ytdlp_lib_parks_real_dir_and_flips_symlink(tmp_path):
+    cfg = tmp_path
+    old = cfg / "ytdlp-lib"
+    old.mkdir()
+    (old / "f.txt").write_text("old")
+    target = ytdlp.versioned_lib_dir(cfg, "1.2.3")
+    target.mkdir(parents=True)
+    (target / "f.txt").write_text("new")
+
+    ytdlp.swap_ytdlp_lib(cfg, target)
+    link = cfg / "ytdlp-lib"
+    assert link.is_symlink()
+    assert (link / "f.txt").read_text() == "new"
+    prev = cfg / "ytdlp-lib.prev"
+    assert prev.is_dir() and not prev.is_symlink()
+    assert (prev / "f.txt").read_text() == "old"
+
+    # a second swap replaces .prev and follows the new target
+    t2 = ytdlp.versioned_lib_dir(cfg, "2.0.0")
+    t2.mkdir(parents=True)
+    (t2 / "f.txt").write_text("newer")
+    ytdlp.swap_ytdlp_lib(cfg, t2)
+    assert (link / "f.txt").read_text() == "newer"
+    assert (prev / "f.txt").read_text() == "new"
+
+
+def test_swap_rotates_old_versions_but_never_deletes_unrelated(tmp_path):
+    cfg = tmp_path
+    versions = []
+    for name in ("2024.01.01", "2024.06.01", "2025.01.01"):
+        d = ytdlp.versioned_lib_dir(cfg, name)
+        d.mkdir(parents=True)
+        versions.append(d)
+    os.utime(versions[0], (1, 1))
+    os.utime(versions[1], (2, 2))
+    os.utime(versions[2], (3, 3))
+    link = cfg / "ytdlp-lib"
+    link.symlink_to(os.path.relpath(versions[2], cfg))
+
+    ytdlp.swap_ytdlp_lib(cfg, versions[2])
+    assert not versions[0].exists()
+    assert versions[1].exists() and versions[2].exists()
+    assert link.is_symlink()

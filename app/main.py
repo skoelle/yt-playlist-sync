@@ -35,6 +35,7 @@ def create_app(settings: Settings | None = None, start_background: bool = True) 
         queue = JobQueue(cfg)
         scheduler = AppScheduler(cfg, queue)
         queue.on_forbidden = scheduler.schedule_update_after_403
+        queue.is_ytdlp_updating = scheduler.is_ytdlp_updating
         app.state.settings, app.state.queue, app.state.scheduler = cfg, queue, scheduler
         if start_background:
             await queue.start()
