@@ -303,6 +303,7 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - Neu: Detailseite zeigt beim Playlist-Wechsel sofort einen Ladezustand statt des Inhalts der alten Playlist; ein laufender Poll verzögert den Wechsel nicht mehr bis zum nächsten Takt (siehe 9).
 - Neu: Wartungs-CLI `python -m app.forget` entfernt eine Playlist samt `playlist_entries`, `jobs`, Download-Archiven und Ordner (Quarantäne), **während die App gestoppt ist** – die einzige Ausnahme zur Regel „nie löschen" (siehe 15).
 - Neu: Das yt-dlp-Update ist race-frei: pip installiert in ein Staging unter `/config/ytdlp-libs/`, `/config/ytdlp-lib` wird als Symlink atomar umgehängt, Queue und Discovery halten während des Tauschs an – behebt `ModuleNotFoundError: yt_dlp.extractor.youtube` beim Abgreifen einer halbfertigen Bibliothek (siehe 6.7).
+- Geändert: Die Fehlermeldung (`jobs.error_summary`) wird in Job-Verlauf und Playlist-Tabellen auf eine Zeile gekürzt (Ellipse, Hover zeigt den vollen Text, vollständig bleibt das Job-Log) – lange Tracebacks zerlegen die Tabellen nicht mehr.
 
 ## 15. Wartungs-CLI `app.forget`
 
