@@ -25,9 +25,10 @@ from app.ytdlp import PlaylistInfo  # noqa: E402
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, stub):
     cfg = Settings(
-        youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config"
+        youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config",
+        ytdlp_bin=stub.bin,
     )
     with TestClient(create_app(cfg, start_background=False)) as c:
         yield c
@@ -69,6 +70,54 @@ def test_oneshot_playlists_default_to_title_order(client):
             pl.completed_at = now if pl.playlist_id == "PL1" else now - timedelta(days=7)
     one = client.get("/api/playlists?type=oneshot").json()
     assert [p["title"] for p in one] == ["Alpha Setlist", "Zulu Setlist"]
+
+
+def test_add_playlist_creates_manual_row(client, stub):
+    """POST /api/playlists: validate via stub, create the row, never auto-enqueue (SPEC 6.10)."""
+    stub.data_ref["playlists"]["PLmanua"] = [
+        {"id": "vid00000101", "title": "One"}, {"id": "vid00000102", "title": "Two"},
+        {"id": "vid00000103", "title": "Three"},
+    ]
+    stub.save()
+    r = client.post("/api/playlists", json={
+        "url": "https://www.youtube.com/playlist?list=PLmanua", "type": "sync",
+    })
+    assert r.status_code == 201
+    body = r.json()
+    assert body["playlist_id"] == "PLmanua" and body["manual"] is True
+    assert body["title"] == "PLmanua" and body["type"] == "sync"
+    assert body["state"] == "new" and body["remote_status"] == "active"
+    assert body["remote_item_count"] == 3 and body["folder_name"] is None
+    with session_scope() as s:
+        pl = s.scalar(select(Playlist).where(Playlist.playlist_id == "PLmanua"))
+        assert pl.manual is True and pl.first_seen_at is not None
+        # no auto-enqueue: the row waits for the existing Download now / Sync now buttons
+        assert s.scalar(select(Job.id).limit(1)) is None
+    # duplicate id is refused before any yt-dlp call
+    assert client.post("/api/playlists", json={"url": "PLmanua"}).status_code == 409
+
+
+def test_add_playlist_with_title(client, stub):
+    stub.data_ref["playlists"]["PLtita"] = [{"id": "vid00000111", "title": "A"}]
+    stub.save()
+    r = client.post("/api/playlists", json={"url": "PLtita", "type": "oneshot", "title": "My Setlist"})
+    assert r.status_code == 201
+    assert r.json()["title"] == "My Setlist"
+
+
+def test_add_playlist_validation_and_errors(client, stub):
+    # 422: unusable type or no playlist id in the URL
+    assert client.post("/api/playlists", json={"url": "PLaaaaa", "type": "bogus"}).status_code == 422
+    r = client.post("/api/playlists", json={"url": "https://www.youtube.com/@x/playlists"})
+    assert r.status_code == 422
+    # 400: yt-dlp says the playlist is not accessible (private/removed/unknown)
+    stub.data_ref["listing_error"]["PLgone1"] = "The playlist does not exist"
+    stub.save()
+    r = client.post("/api/playlists", json={"url": "PLgone1"})
+    assert r.status_code == 400 and "playlist not accessible" in r.json()["detail"]
+    # 400 (not 500): id the stub does not know at all
+    r = client.post("/api/playlists", json={"url": "PLnope1"})
+    assert r.status_code == 400
 
 
 def test_ui_has_no_page_reload():
