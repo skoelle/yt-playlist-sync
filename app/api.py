@@ -50,7 +50,7 @@ def playlist_dict(pl: Playlist, last_job: Job | None) -> dict[str, Any]:
         "folder_name": pl.folder_name, "remote_item_count": pl.remote_item_count,
         "downloaded_count": pl.downloaded_count, "skipped_count": pl.skipped_count,
         "failed_count": pl.failed_count, "size_bytes": pl.size_bytes, "state": pl.state,
-        "remote_status": pl.remote_status, "ignored": pl.ignored,
+        "remote_status": pl.remote_status, "ignored": pl.ignored, "manual": pl.manual,
         "first_seen_at": iso(pl.first_seen_at), "last_seen_at": iso(pl.last_seen_at),
         "first_downloaded_at": iso(pl.first_downloaded_at),
         "completed_at": iso(pl.completed_at), "last_sync_at": iso(pl.last_sync_at),

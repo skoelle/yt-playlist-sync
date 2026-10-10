@@ -220,6 +220,19 @@ def test_lib_env_puts_staging_first(tmp_path):
     assert parts[0] == str(tmp_path / "ytdlp-libs" / ".staging")
 
 
+def test_playlist_id_from_url():
+    pid = "PLLEkTmNIRKoYVBjXHuqiWQUk-Q9ZMOC_jm"
+    assert ytdlp.playlist_id_from_url(pid) == pid
+    assert ytdlp.playlist_id_from_url(f"https://www.youtube.com/playlist?list={pid}") == pid
+    assert ytdlp.playlist_id_from_url(f"https://youtube.com/watch?v=abcdefghijk&list={pid}&index=1") == pid
+    assert ytdlp.playlist_id_from_url(f"https://youtu.be/abcdefghijk?list={pid}") == pid
+    assert ytdlp.playlist_id_from_url(f"  {pid}  ") == pid
+    assert ytdlp.playlist_id_from_url("https://www.youtube.com/@beispielkanal/playlists") is None
+    assert ytdlp.playlist_id_from_url("https://www.youtube.com/watch?v=abcdefghijk") is None
+    assert ytdlp.playlist_id_from_url("") is None
+    assert ytdlp.playlist_id_from_url("https://www.youtube.com/playlist?list=") is None
+
+
 def test_versioned_and_staging_lib_dirs(tmp_path):
     assert ytdlp.staging_lib_dir(tmp_path) == tmp_path / "ytdlp-libs" / ".staging"
     assert ytdlp.versioned_lib_dir(tmp_path, "2025.10.08") == tmp_path / "ytdlp-libs" / "yt-dlp-2025.10.08"
