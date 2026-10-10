@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,6 +97,75 @@ def ytdlp_env(config_dir: Path | str) -> dict[str, str]:
         old = env.get("PYTHONPATH")
         env["PYTHONPATH"] = f"{lib}{os.pathsep}{old}" if old else str(lib)
     return env
+
+
+def lib_env(config_dir: Path | str, lib: Path | str) -> dict[str, str]:
+    """Like ``ytdlp_env`` but with an explicit library directory (e.g. a staging install)."""
+    env = dict(os.environ)
+    old = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = f"{lib}{os.pathsep}{old}" if old else str(lib)
+    return env
+
+
+def staging_lib_dir(config_dir: Path | str) -> Path:
+    """Scratch install directory below <config>/ytdlp-libs (never on PYTHONPATH)."""
+    return Path(config_dir) / "ytdlp-libs" / ".staging"
+
+
+def versioned_lib_dir(config_dir: Path | str, version: str) -> Path:
+    """Final install directory for one yt-dlp version below <config>/ytdlp-libs/."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", version).strip("._") or "unknown"
+    return Path(config_dir) / "ytdlp-libs" / f"yt-dlp-{safe}"
+
+
+def swap_ytdlp_lib(config_dir: Path | str, target: Path | str) -> None:
+    """Point <config>/ytdlp-lib at target with an atomic symlink swap (SPEC 6.7).
+
+    pip --target writes a directory non-atomically, so a download or listing that
+    starts mid-update would import a half-written tree. Installing into a versioned
+    directory and swapping a symlink keeps both ends complete: every concurrent run
+    sees either the old or the new installation. The previously active install is
+    parked as ``ytdlp-lib.prev`` (never deleted, an existing ``.prev`` is replaced):
+    a pre-symlink real directory directly, a symlink via its target, so an old
+    version can be pointed back to by hand. Old versioned installs are rotated to
+    the two newest.
+    """
+    cfg = Path(config_dir)
+    link = cfg / "ytdlp-lib"
+    target = Path(target)
+    if link.is_symlink():
+        old_target = Path(os.path.realpath(link))
+        if (old_target.exists() and old_target.is_relative_to(cfg)
+                and old_target != Path(os.path.realpath(target))):
+            _park_prev(cfg, old_target)
+    elif link.exists():
+        _park_prev(cfg, link)
+    tmp = cfg / "ytdlp-lib.tmp"
+    if tmp.is_symlink():
+        tmp.unlink()
+    elif tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.symlink_to(os.path.relpath(target, cfg))
+    os.replace(tmp, link)
+    _rotate_lib_dirs(cfg / "ytdlp-libs")
+
+
+def _park_prev(cfg: Path, path: Path) -> None:
+    prev = cfg / "ytdlp-lib.prev"
+    if prev.is_dir():
+        shutil.rmtree(prev)
+    elif prev.exists():
+        prev.unlink()
+    path.rename(prev)
+
+
+def _rotate_lib_dirs(libs: Path, keep: int = 2) -> None:
+    if not libs.is_dir():
+        return
+    dirs = [p for p in libs.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in dirs[keep:]:
+        shutil.rmtree(old, ignore_errors=True)
 
 
 def build_update_command(lib: Path | str) -> list[str]:

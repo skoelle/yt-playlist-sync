@@ -96,7 +96,12 @@ async def run_playlist(
             entries = await ytdlp.list_playlist_entries(p.ytdlp_bin, p.playlist_id, env)
         except Exception as exc:  # noqa: BLE001
             write(f"Could not list playlist: {exc}")
-            result.error_summary = f"Could not list playlist: {str(exc)[:300]}"
+            summary = str(exc)
+            if isinstance(exc, ModuleNotFoundError):
+                # Missing yt_dlp submodules mean the self-updated library was imported
+                # mid-swap - infrastructure, not a playlist problem (SPEC 6.7).
+                summary = f"yt-dlp installation was being updated, retry: {summary}"
+            result.error_summary = f"Could not list playlist: {summary[:300]}"
             if ytdlp.is_forbidden(str(exc)):
                 result.forbidden = True
             elif ytdlp.is_gone(str(exc)):

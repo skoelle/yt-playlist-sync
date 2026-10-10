@@ -23,6 +23,8 @@ const state = {
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
   { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+const errSpan = (msg) => `<span class="sub err" title="${esc(msg)}">${esc(msg)}</span>`;
+
 function fmtBytes(n) {
   if (n == null) return "-";
   const u = ["B", "KB", "MB", "GB", "TB"];
@@ -152,7 +154,7 @@ function jobRow(j, showTitle = true) {
   const titleCol = showTitle
     ? `<td class="ct-head"><a href="#playlist-${j.playlist_pk}">${esc(j.playlist_title)}</a></td>` : "";
   return `${idCol}${titleCol}<td data-label="Trigger">${esc(j.trigger)}</td>
-    <td data-label="Status">${badge(j.status)}${j.error_summary ? `<span class="sub">${esc(j.error_summary)}</span>` : ""}</td>
+    <td data-label="Status">${badge(j.status)}${j.error_summary ? errSpan(j.error_summary) : ""}</td>
     <td data-label="Duration">${esc(fmtDur(j.duration_s))}</td><td data-label="New">${j.items_new}</td>
     <td data-label="Skipped">${j.items_skipped}</td><td data-label="Failed">${j.items_failed}</td>
     <td class="ct-actions"><button data-action="show-log" data-job="${j.id}">Log</button>
@@ -168,7 +170,7 @@ function syncRow(p) {
     ` <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a>` +
     (p.remote_status === "removed" ? ` <span class="badge s-failed">removed</span>` : "") +
     (p.ignored ? ` <span class="badge">ignored</span>` : "");
-  const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
+  const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? errSpan(p.last_job.error_summary) : "";
   return `<td class="ct-head">${title}</td><td data-label="Videos">${videos}</td><td data-label="Size">${fmtBytes(p.size_bytes)}</td>
     <td data-label="Last sync">${last}</td>
     <td data-label="Next sync">${p.ignored || p.remote_status === "removed" ? "-" : nextSync ? when(nextSync) : "-"}</td>
@@ -197,7 +199,7 @@ function oneshotRow(p) {
   if (p.skipped_count) extra.push(`${p.skipped_count} not available`);
   if (p.failed_count) extra.push(`${p.failed_count} failed`);
   const songs = `${p.downloaded_count} / ${p.remote_item_count ?? "?"}` + (extra.length ? `<span class="sub">${extra.join(", ")}</span>` : "");
-  const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? `<span class="sub">${esc(p.last_job.error_summary)}</span>` : "";
+  const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? errSpan(p.last_job.error_summary) : "";
   const acts = [];
   if (p.state === "failed") acts.push(`<button data-action="retry" data-id="${p.id}">Retry</button>`);
   if (p.state === "new" || p.state === "idle") acts.push(`<button data-action="run" data-id="${p.id}">Download now</button>`);

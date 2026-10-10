@@ -30,12 +30,12 @@ FastAPI (app/main.py, Lifespan)
 | `app/db.py` | Engine-Init (Global!), WAL-PRAGMAs, `session_scope()`, `utcnow()` (naives UTC), `migrate()` |
 | `app/models.py` | `Playlist`, `Job`, `Run`, `PlaylistEntry` (Listing-Snapshot) + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
 | `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `backup_archives` (tar.gz von `archives/`), `sqlite_path`, Integritätschecks, Rotation `BACKUP_KEEP` je Namensmuster |
-| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`/`append_archive` (append-only Download-Archive), `is_gone` (Musterliste: Playlist weg/privat/404), `channel_playlists_url`, `parse_video_listing` (Position/Dauer/Unavailable), `read_video_entries` (Galerie inkl. Tech-Metadaten, auch `.webm`), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear) |
+| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`/`append_archive` (append-only Download-Archive), `is_gone` (Musterliste: Playlist weg/privat/404), `channel_playlists_url`, `parse_video_listing` (Position/Dauer/Unavailable), `read_video_entries` (Galerie inkl. Tech-Metadaten, auch `.webm`), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear), `staging_lib_dir`/`versioned_lib_dir`/`swap_ytdlp_lib`/`lib_env` (atomarer Update-Swap: Staging → versioniertes Verzeichnis → Symlink `os.replace`, `.prev` parkt den alten Stand) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
-| `app/runner.py` | `RunParams`/`RunResult` (Felder `forbidden` für 403-Abbruch, `gone` für bestätigt verschwundene Playlist, `entries` = Listing-Snapshot), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung |
-| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States und `_persist_entries` (Upsert `playlist_entries`, nie löschen), **Gone-Regel** (`r.gone` → `remote_status=removed` + `sync→oneshot` + `failed`, Counts unangetastet; Listing-Erfolg stellt nur `remote_status=active` wieder her, nie den Typ), Pause bei 429/403, `on_forbidden`-Callback, Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
+| `app/runner.py` | `RunParams`/`RunResult` (Felder `forbidden` für 403-Abbruch, `gone` für bestätigt verschwundene Playlist, `entries` = Listing-Snapshot), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung, `ModuleNotFoundError` beim Listing als Infra-Fehler des Update-Tauschs klassifiziert („installation was being updated, retry") |
+| `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States und `_persist_entries` (Upsert `playlist_entries`, nie löschen), **Gone-Regel** (`r.gone` → `remote_status=removed` + `sync→oneshot` + `failed`, Counts unangetastet; Listing-Erfolg stellt nur `remote_status=active` wieder her, nie den Typ), Pause bei 429/403, `on_forbidden`-Callback, Gate `is_ytdlp_updating` (wartet, kein Job-Start solange die Bibliothek getauscht wird), Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen, **keine** `removed`-Markierung mehr – nicht gelistete Playlists bleiben unverändert; Existenz entscheidet der Sync-Lauf), `run_discovery` mit Leerlistenschutz |
-| `app/scheduler.py` | Cron-Jobs (Sync inkl. `SYNC_JITTER`, Update, Cleanup, Backup) + Discovery als Intervall (`_schedule_discovery`/`_discovery_tick`, `DISCOVERY_INTERVAL_MIN/MAX`), Healthchecks-Pings, yt-dlp-Update via `pip --target /config/ytdlp-lib` (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update) |
+| `app/scheduler.py` | Cron-Jobs (Sync inkl. `SYNC_JITTER`, Update, Cleanup, Backup) + Discovery als Intervall (`_schedule_discovery`/`_discovery_tick`, `DISCOVERY_INTERVAL_MIN/MAX`), Healthchecks-Pings, yt-dlp-Update via Staging unter `/config/ytdlp-libs/` + atomarem Symlink-Swap (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update), Flag `ytdlp_updating` sperrt Queue/Discovery während des Swap-Laufs |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
 | `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
@@ -96,7 +96,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **164 Tests grün** (`pytest -q`, ~27 s).
+- Bestehender Stand: **172 Tests grün** (`pytest -q`, ~27 s).
 
 ## Harte Regeln
 
@@ -149,7 +149,7 @@ Nicht ins Repo: persönliche Lauf- und Migrationsprotokolle (welche Playlist wan
 übernommen wurde), echte Pfade, IDs oder Titel aus den eigenen Datenbeständen – sie
 gehören ins Arbeitsprotokoll, nicht ins Werkzeug.
 
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (164), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (172), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

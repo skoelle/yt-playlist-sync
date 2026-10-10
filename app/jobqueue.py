@@ -34,6 +34,7 @@ class JobQueue:
         self.paused_until = None
         self.current_job_id: int | None = None
         self.on_forbidden: Callable[[], None] | None = None
+        self.is_ytdlp_updating: Callable[[], bool] | None = None
         self._wakeup = asyncio.Event()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._task: asyncio.Task | None = None
@@ -172,6 +173,12 @@ class JobQueue:
             if wait > 0:
                 self._gap_pending = False
                 await asyncio.sleep(min(wait, 30))
+                continue
+            if self.is_ytdlp_updating is not None and self.is_ytdlp_updating():
+                # yt-dlp library is mid-swap: importing a half-written tree must not
+                # happen, the jobs simply wait (SPEC 6.7).
+                self._gap_pending = False
+                await asyncio.sleep(5)
                 continue
             if not self.settings.dry_run and not self.settings.data_writable():
                 self._gap_pending = False
