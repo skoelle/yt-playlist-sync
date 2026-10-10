@@ -11,12 +11,20 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
-from .db import session_scope
+from .db import session_scope, utcnow
 from .models import Job, Playlist, PlaylistEntry, Run
-from .ytdlp import read_archive, read_video_entries
+from .ytdlp import (
+    YtDlpError,
+    list_playlist_entries,
+    playlist_id_from_url,
+    read_archive,
+    read_video_entries,
+    ytdlp_env,
+)
 
 router = APIRouter(prefix="/api")
 _background: set[asyncio.Task] = set()
@@ -50,7 +58,7 @@ def playlist_dict(pl: Playlist, last_job: Job | None) -> dict[str, Any]:
         "folder_name": pl.folder_name, "remote_item_count": pl.remote_item_count,
         "downloaded_count": pl.downloaded_count, "skipped_count": pl.skipped_count,
         "failed_count": pl.failed_count, "size_bytes": pl.size_bytes, "state": pl.state,
-        "remote_status": pl.remote_status, "ignored": pl.ignored,
+        "remote_status": pl.remote_status, "ignored": pl.ignored, "manual": pl.manual,
         "first_seen_at": iso(pl.first_seen_at), "last_seen_at": iso(pl.last_seen_at),
         "first_downloaded_at": iso(pl.first_downloaded_at),
         "completed_at": iso(pl.completed_at), "last_sync_at": iso(pl.last_sync_at),
@@ -119,6 +127,44 @@ async def playlists(type: str | None = Query(None, pattern="^(sync|oneshot)$")) 
             last = s.scalar(select(Job).where(Job.playlist_id == pl.id).order_by(Job.id.desc()).limit(1))
             out.append(playlist_dict(pl, last))
     return out
+
+
+class NewPlaylist(BaseModel):
+    url: str = Field(max_length=500)
+    type: str = "oneshot"
+    title: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/playlists", status_code=201)
+async def add_playlist(body: NewPlaylist, request: Request) -> dict[str, Any]:
+    """Add a playlist by URL (manual entry, e.g. unlisted; SPEC 6.10). No auto-enqueue."""
+    cfg = request.app.state.settings
+    if body.type not in ("sync", "oneshot"):
+        raise HTTPException(422, "type must be 'sync' or 'oneshot'")
+    pid = playlist_id_from_url(body.url)
+    if pid is None:
+        raise HTTPException(422, "not a YouTube playlist URL")
+    with session_scope() as s:
+        if s.scalar(select(Playlist.id).where(Playlist.playlist_id == pid)):
+            raise HTTPException(409, "playlist already exists")
+    try:
+        entries = await list_playlist_entries(cfg.ytdlp_bin, pid, ytdlp_env(cfg.config_dir))
+    except YtDlpError as exc:
+        raise HTTPException(400, f"playlist not accessible: {exc}") from exc
+    now = utcnow()
+    try:
+        with session_scope() as s:
+            pl = Playlist(
+                playlist_id=pid, title=(body.title or pid)[:500], type=body.type, manual=True,
+                remote_item_count=len(entries), state="new", remote_status="active",
+                first_seen_at=now, last_seen_at=now,
+            )
+            s.add(pl)
+            s.flush()
+            return playlist_dict(pl, None)
+    except IntegrityError:
+        # unique playlist_id lost a race against a concurrent add
+        raise HTTPException(409, "playlist already exists") from None
 
 
 @router.get("/playlists/{pid}")

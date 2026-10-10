@@ -103,6 +103,16 @@ only overwritten, nothing is deleted), start the container.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
 - ❓ Discovery never marks a playlist as *removed*: a playlist that is missing from the channel listing (unlisted, manually added, imported) keeps its type and keeps syncing. Only a sync run can confirm that a playlist is gone – then it becomes `removed` and switches from *sync* to *oneshot* (HTTP 403/429, network or age errors never do that). When it reappears, only the status returns to *active*, the type stays *oneshot*.
 
+## ➕ Adding a playlist manually
+
+Playlists that never show up in the channel listing – unlisted, removed from the channel, or belonging to someone else – can be added by hand:
+
+1. Open the **Sync** or **Oneshot** tab; the type follows the tab.
+2. Paste the playlist URL (`…/playlist?list=…`, any watch URL with `&list=…`, or the bare playlist ID), optionally enter a title, click **Add playlist**.
+3. The app validates the playlist with yt-dlp (no login, works for unlisted) and adds a row marked `manual`. Nothing is downloaded yet – use **Sync now** / **Download now** like for any other playlist.
+
+Manually added sync playlists run in the nightly sync like every other sync playlist; oneshots wait for the button. Errors (private, deleted, already added) appear next to the form. Existing rows are never touched or deleted.
+
 ## 🗄️ Exporting from TubeArchivist
 
 An existing TubeArchivist library can be exported into the same folder layout this project
@@ -326,7 +336,7 @@ Dependency updates arrive as weekly Renovate PRs (Mondays before 6 am, minor/pat
 
 Optionally, a successful image push can notify your own endpoint: add the repository secrets `WEBHOOK_URL` and `WEBHOOK_TOKEN`. The build workflow then sends a `POST` with an `Authorization: Bearer <token>` header and waits (up to 10 minutes) for the response; the step fails unless the reply reports `summary.updated > 0`. Without the secrets nothing is sent.
 
-See [SPEC.md](SPEC.md) for the specification (behaviour, the source of truth), [PLAN.md](PLAN.md) for status and the decision log, [MANUAL-PLAYLIST.md](MANUAL-PLAYLIST.md) for the draft of the not-yet-built manual playlist entry and [AGENTS.md](AGENTS.md) for the working rules plus the map that says which kind of content belongs in which file.
+See [SPEC.md](SPEC.md) for the specification (behaviour, the source of truth), [PLAN.md](PLAN.md) for status and the decision log and [AGENTS.md](AGENTS.md) for the working rules plus the map that says which kind of content belongs in which file.
 
 ## 📁 Project structure
 
@@ -348,7 +358,7 @@ migrations/                  Alembic schema migrations
 tests/                       pytest suite; fixtures/fake_ytdlp.py is the network-free stub
 .github/workflows/           test.yml (ruff + pytest), build.yml (weekly amd64 image)
 renovate.json                weekly dependency update schedule
-SPEC.md / PLAN.md / MANUAL-PLAYLIST.md / AGENTS.md  specification, status + decisions, open feature draft, working rules
+SPEC.md / PLAN.md / AGENTS.md  specification, status + decisions, working rules
 ```
 
 ## 📜 License

@@ -89,6 +89,18 @@ def playlist_url(playlist_id: str) -> str:
     return f"https://www.youtube.com/playlist?list={playlist_id}"
 
 
+_PLAYLIST_ID = re.compile(r"[A-Za-z0-9_-]{6,64}")
+
+
+def playlist_id_from_url(url: str) -> str | None:
+    """Playlist id from a bare id, a playlist URL, or any URL carrying ``list=``."""
+    u = url.strip()
+    if _PLAYLIST_ID.fullmatch(u):
+        return u
+    match = re.search(r"[?&]list=([A-Za-z0-9_-]+)", u)
+    return match.group(1) if match and _PLAYLIST_ID.fullmatch(match.group(1)) else None
+
+
 def ytdlp_env(config_dir: Path | str) -> dict[str, str]:
     """Environment for yt-dlp; prefers a self-updated copy in <config>/ytdlp-lib."""
     env = dict(os.environ)

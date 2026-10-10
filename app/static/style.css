@@ -25,6 +25,15 @@ button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-ra
          color:var(--fg); cursor:pointer; }
 button:hover { border-color:var(--accent); }
 button.danger { color:var(--bad); }
+button:disabled { opacity:.5; cursor:default; }
+input[type=text] { font:inherit; padding:4px 8px; border:1px solid var(--line); border-radius:6px;
+                   background:var(--card); color:var(--fg); min-width:0; }
+input[type=text]:focus { outline:none; border-color:var(--accent); }
+.add-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:0 0 10px; }
+.add-form input { flex:1 1 180px; }
+.add-status { font-size:12px; color:var(--muted); }
+.add-status.ok { color:var(--ok); }
+.add-status.err { color:var(--bad); }
 .table-wrap { overflow-x:auto; }
 table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); }
 th, td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
@@ -94,6 +103,7 @@ a.vid-play:hover .vid-title, .vid-title a:hover { color:var(--accent); }
   main { padding:12px; }
   .banner { padding:8px 12px; }
   .card { padding:10px 12px; }
+  .add-form input, .add-form button { flex:1 1 100%; }
   .ct { display:block; border:0; background:none; }
   .ct thead { display:block; border:0; }
   .ct thead tr { display:flex; flex-wrap:wrap; gap:6px; background:none; }

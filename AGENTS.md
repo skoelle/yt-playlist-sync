@@ -30,7 +30,7 @@ FastAPI (app/main.py, Lifespan)
 | `app/db.py` | Engine-Init (Global!), WAL-PRAGMAs, `session_scope()`, `utcnow()` (naives UTC), `migrate()` |
 | `app/models.py` | `Playlist`, `Job`, `Run`, `PlaylistEntry` (Listing-Snapshot) + CheckConstraints über Tupel in `*_TYPES/STATUSES/TRIGGERS` |
 | `app/backup.py` | `backup_database` (sqlite3-Backup-API statt Dateikopie), `backup_archives` (tar.gz von `archives/`), `sqlite_path`, Integritätschecks, Rotation `BACKUP_KEEP` je Namensmuster |
-| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`/`append_archive` (append-only Download-Archive), `is_gone` (Musterliste: Playlist weg/privat/404), `channel_playlists_url`, `parse_video_listing` (Position/Dauer/Unavailable), `read_video_entries` (Galerie inkl. Tech-Metadaten, auch `.webm`), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear), `staging_lib_dir`/`versioned_lib_dir`/`swap_ytdlp_lib`/`lib_env` (atomarer Update-Swap: Staging → versioniertes Verzeichnis → Symlink `os.replace`, `.prev` parkt den alten Stand) |
+| `app/ytdlp.py` | `build_download_command`, `parse_line`, `evaluate`, `read_archive`/`append_archive` (append-only Download-Archive), `is_gone` (Musterliste: Playlist weg/privat/404), `channel_playlists_url`, `playlist_id_from_url` (bare ID, Playlist-URL, `&list=` in beliebigen URLs), `parse_video_listing` (Position/Dauer/Unavailable), `read_video_entries` (Galerie inkl. Tech-Metadaten, auch `.webm`), `build_update_command`/`build_cache_clear_command` (Update mit `[default]`, Cache-Clear), `staging_lib_dir`/`versioned_lib_dir`/`swap_ytdlp_lib`/`lib_env` (atomarer Update-Swap: Staging → versioniertes Verzeichnis → Symlink `os.replace`, `.prev` parkt den alten Stand) |
 | `app/paths.py` | `sanitize_folder_name`, `is_oneshot` |
 | `app/runner.py` | `RunParams`/`RunResult` (Felder `forbidden` für 403-Abbruch, `gone` für bestätigt verschwundene Playlist, `entries` = Listing-Snapshot), `ProcessHandle` (SIGTERM → 30 s → SIGKILL), Rate-Limit- und 403-Erkennung, `ModuleNotFoundError` beim Listing als Infra-Fehler des Update-Tauschs klassifiziert („installation was being updated, retry") |
 | `app/jobqueue.py` | `enqueue`/`cancel`/`recover`/`wait_for_jobs`, Prioritäten-Map `PRIORITY`, `_finalize` setzt Playlist-States und `_persist_entries` (Upsert `playlist_entries`, nie löschen), **Gone-Regel** (`r.gone` → `remote_status=removed` + `sync→oneshot` + `failed`, Counts unangetastet; Listing-Erfolg stellt nur `remote_status=active` wieder her, nie den Typ), Pause bei 429/403, `on_forbidden`-Callback, Gate `is_ytdlp_updating` (wartet, kein Job-Start solange die Bibliothek getauscht wird), Job-Gap (`JOB_GAP_MIN`/`MAX`) zwischen zwei Jobs |
@@ -96,7 +96,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **172 Tests grün** (`pytest -q`, ~27 s).
+- Bestehender Stand: **178 Tests grün** (`pytest -q`, ~28 s).
 
 ## Harte Regeln
 
@@ -143,13 +143,13 @@ steht – das gilt für jede weitere Bearbeitung:
 | `README.md` | Nutzer & Betreiber (englisch): Quick start, Konfiguration, Volumes, Backup/Restore, Export/Import/Forgetting, Projektstruktur | Bedienanleitungen, ENV-Spalten, Deployment-Hinweise | interne Entscheidungen, Spezifikationstexte, TODOs |
 | `AGENTS.md` | Regeln und Orientierung für die Arbeit am Code (diese Datei): Architektur, Befehle, Test-/Lint-Pflichten, harte Regeln, CI/CD, diese Dokumentationskarte | was vor dem ersten Eingriff gelten muss | Status, Changelog, Nutzeranleitung |
 | `PLAN.md` | Status & Warum: Umsetzungsstand (Testzahlen), **Entscheidungslog** (append-only: Begründung, Alternative, Warum-gegen-um), priorisierte offene Punkte, Regeln für den Agenten | neue Entscheidungen, neue offene Punkte – bestehende Einträge nicht löschen | Verhalten (→ `SPEC.md`), How-to (→ `README.md`), erledigte Phasen-Checklisten |
-| `MANUAL-PLAYLIST.md` | Offene Feature-Idee (noch nicht gebaut): manuelles Eintragen von Playlists – Entwurf mit bestätigten Entscheidungen, offenen Umsetzungspunkten, Risiken. Wenn fertig: Verhalten nach SPEC/README überführen, Datei zusammenschneiden | Entwürfe und offene Punkte, solange die Baustelle offen ist | erledigte Teile, veraltete Stände (der Import-/Export-Teil ist raus, steht in SPEC §14/§15 + README) |
+| `MANUAL-PLAYLIST.md` | Abschluss-Verweis des fertig gebauten Features „manuelles Eintragen von Playlists" (Verhalten: SPEC §6.10, How-to: README) plus zwei Randentscheidungen (Nightly-Mitlauf, Titel-Feld). Entwurfstatus hat sich erledigt | neues Dokument hier nur, wenn wieder eine offene Baustelle hinzukommt | erledigte Teile, veraltete Stände, Verhalten (→ `SPEC.md`), How-to (→ `README.md`) |
 
 Nicht ins Repo: persönliche Lauf- und Migrationsprotokolle (welche Playlist wann
 übernommen wurde), echte Pfade, IDs oder Titel aus den eigenen Datenbeständen – sie
 gehören ins Arbeitsprotokoll, nicht ins Werkzeug.
 
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (172), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (178), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

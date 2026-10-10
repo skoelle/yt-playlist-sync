@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -50,6 +51,7 @@ class Playlist(Base):
     state: Mapped[str] = mapped_column(String(16), default="new")
     remote_status: Mapped[str] = mapped_column(String(16), default="active")
     ignored: Mapped[bool] = mapped_column(Boolean, default=False)
+    manual: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime)
     first_downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

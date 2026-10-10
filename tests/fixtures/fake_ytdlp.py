@@ -31,7 +31,10 @@ def main():
             if err is not None:
                 log_err(f"ERROR: [youtube:playlist] {pid}: {err}")
                 return 1
-            vids = data["playlists"][pid]
+            vids = data["playlists"].get(pid)
+            if vids is None:
+                log_err(f"ERROR: [youtube:playlist] {pid}: The playlist does not exist")
+                return 1
             print(json.dumps({"_type": "playlist", "id": pid,
                               "entries": [{"id": v["id"], "title": v["title"]} for v in vids]}))
         return 0
