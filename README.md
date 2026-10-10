@@ -334,6 +334,8 @@ DATA_DIR=./.dev/data CONFIG_DIR=./.dev/config DRY_RUN=1 YOUTUBE_CHANNEL=@yourcha
 
 Dependency updates arrive as weekly Renovate PRs (Mondays before 6 am, minor/patch merged automatically).
 
+Optionally, a successful image push can notify your own endpoint: add the repository secrets `WEBHOOK_URL` and `WEBHOOK_TOKEN`. The build workflow then sends a `POST` with an `Authorization: Bearer <token>` header and waits (up to 10 minutes) for the response; the step fails unless the reply reports `summary.updated > 0`. Without the secrets nothing is sent.
+
 See [SPEC.md](SPEC.md) for the specification (behaviour, the source of truth), [PLAN.md](PLAN.md) for status and the decision log and [AGENTS.md](AGENTS.md) for the working rules plus the map that says which kind of content belongs in which file.
 
 ## 📁 Project structure
