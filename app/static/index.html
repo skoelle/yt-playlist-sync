@@ -94,6 +94,12 @@
 
   <section id="tab-sync" data-tab="sync" hidden>
     <p class="muted" id="sync-summary"></p>
+    <form class="add-form" data-type="sync">
+      <input type="text" name="url" placeholder="Playlist URL or ID" required autocomplete="off">
+      <input type="text" name="title" placeholder="Title (optional)" maxlength="200" autocomplete="off">
+      <button type="submit">Add playlist</button>
+      <span class="add-status" role="status"></span>
+    </form>
     <div class="table-wrap">
     <table id="sync-table" class="ct">
       <thead><tr><th data-sort="title">Title</th><th data-sort="videos">Videos</th><th data-sort="size">Size</th>
@@ -105,6 +111,12 @@
 
   <section id="tab-oneshot" data-tab="oneshot" hidden>
     <p class="muted" id="oneshot-summary"></p>
+    <form class="add-form" data-type="oneshot">
+      <input type="text" name="url" placeholder="Playlist URL or ID" required autocomplete="off">
+      <input type="text" name="title" placeholder="Title (optional)" maxlength="200" autocomplete="off">
+      <button type="submit">Add playlist</button>
+      <span class="add-status" role="status"></span>
+    </form>
     <div class="table-wrap">
     <table id="oneshot-table" class="ct">
       <thead><tr>

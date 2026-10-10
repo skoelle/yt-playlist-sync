@@ -169,7 +169,8 @@ function syncRow(p) {
   const title = `<a href="#playlist-${p.id}">${esc(p.title)}</a>` +
     ` <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a>` +
     (p.remote_status === "removed" ? ` <span class="badge s-failed">removed</span>` : "") +
-    (p.ignored ? ` <span class="badge">ignored</span>` : "");
+    (p.ignored ? ` <span class="badge">ignored</span>` : "") +
+    (p.manual ? ` <span class="badge">manual</span>` : "");
   const err = p.state === "failed" && p.last_job && p.last_job.error_summary ? errSpan(p.last_job.error_summary) : "";
   return `<td class="ct-head">${title}</td><td data-label="Videos">${videos}</td><td data-label="Size">${fmtBytes(p.size_bytes)}</td>
     <td data-label="Last sync">${last}</td>
@@ -207,7 +208,8 @@ function oneshotRow(p) {
   if (p.last_job) acts.push(`<button data-action="show-log" data-job="${p.last_job.id}">Log</button>`);
   acts.push(`<button data-action="to-sync" data-id="${p.id}">Mark as sync</button>`);
   return `<td class="ct-head"><a href="#playlist-${p.id}">${esc(p.title)}</a>
-    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a></td>
+    <a class="ext" href="${esc(p.url)}" target="_blank" rel="noopener" title="Open YouTube">↗</a>` +
+    (p.manual ? ` <span class="badge">manual</span>` : "") + `</td>
     <td data-label="Downloaded on">${date}</td><td data-label="Songs">${songs}</td>
     <td data-label="Size">${fmtBytes(p.size_bytes)}</td><td data-label="Duration">${p.last_job ? esc(fmtDur(p.last_job.duration_s)) : "-"}</td>
     <td data-label="Status">${badge(p.state)}${err}</td><td class="ct-actions">${acts.join(" ")}</td>`;
@@ -602,6 +604,33 @@ async function act(action, el) {
   }
   tick(true);
 }
+
+document.addEventListener("submit", async (ev) => {
+  const form = ev.target.closest(".add-form");
+  if (!form) return;
+  ev.preventDefault();
+  const btn = form.querySelector("button[type=submit]");
+  const status = form.querySelector(".add-status");
+  const url = form.url.value.trim();
+  const title = form.title.value.trim();
+  btn.disabled = true;
+  status.className = "add-status";
+  status.textContent = "Adding...";
+  try {
+    const pl = await api("/playlists", {
+      method: "POST", body: { url, type: form.dataset.type, title: title || null },
+    });
+    status.className = "add-status ok";
+    status.textContent = `Added "${pl.title}".`;
+    form.reset();
+    tick(true);
+  } catch (err) {
+    status.className = "add-status err";
+    status.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.addEventListener("click", (ev) => {
   const btn = ev.target.closest("[data-action]");

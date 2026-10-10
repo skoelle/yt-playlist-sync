@@ -125,6 +125,36 @@ def test_ui_has_no_page_reload():
     assert "location.reload" not in js
 
 
+def test_ui_has_add_playlist_forms():
+    root = Path(__file__).parent.parent / "app" / "static"
+    html = (root / "index.html").read_text()
+    js = (root / "app.js").read_text()
+    # one form per tab, the type follows the active tab
+    assert html.count('class="add-form"') == 2
+    assert 'data-type="sync"' in html and 'data-type="oneshot"' in html
+    assert "Add playlist" in html and "Title (optional)" in html
+    assert 'method: "POST", body: { url, type: form.dataset.type' in js
+    assert ".add-form" in (root / "style.css").read_text()
+
+
+def test_migration_adds_manual_column_is_idempotent(tmp_path):
+    import sqlalchemy as sa
+
+    from app.config import ensure_dirs
+    from app.db import init_engine, migrate
+
+    cfg = Settings(
+        youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config"
+    )
+    ensure_dirs(cfg)
+    init_engine(cfg.db_url)
+    migrate(cfg.db_url)
+    migrate(cfg.db_url)  # running the chain again must be a no-op (existence guards)
+    eng = sa.create_engine(cfg.db_url)
+    cols = {c["name"] for c in sa.inspect(eng).get_columns("playlists")}
+    assert "manual" in cols
+
+
 def test_ui_sync_tab_has_summary_and_sort():
     root = Path(__file__).parent.parent / "app" / "static"
     html = (root / "index.html").read_text()
