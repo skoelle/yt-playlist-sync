@@ -26,6 +26,7 @@ button { font:inherit; padding:4px 10px; border:1px solid var(--line); border-ra
          color:var(--fg); cursor:pointer; }
 button:hover { border-color:var(--accent); }
 button.danger { color:var(--bad); }
+.card.danger-zone { border-color:var(--bad); }
 button:disabled { opacity:.5; cursor:default; }
 input[type=text] { font:inherit; padding:4px 8px; border:1px solid var(--line); border-radius:6px;
                    background:var(--card); color:var(--fg); min-width:0; }

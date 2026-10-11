@@ -5,7 +5,7 @@ Self-hosted service that watches the **public playlists of one YouTube channel**
 - ⏰ **Discovery every hour.** New playlists are queued and downloaded immediately.
 - 🔄 **Sync playlists** (title does *not* contain the keyword) are synced once per night. A per-playlist yt-dlp download archive makes sure only new videos are fetched.
 - 🎯 **Oneshot playlists** (title contains one of the keywords, default `setlist`, comma-separated, case-insensitive) are downloaded once. After a complete run they are never touched again. If something went wrong you get a status, an error summary and a retry button.
-- 🚫 **Never deletes anything.** Playlists that disappear from YouTube are only marked `removed`.
+- 🚫 **Never deletes files.** Playlists that disappear from YouTube are only marked `removed`. Removing a playlist from the database (keeping all files) is an explicit action: *Unlink* in the UI or the offline `forget` CLI.
 - 🐌 One download at a time, no parallelism, with sleeps between videos to stay polite.
 - 🖥️ Small web UI with three tabs: *Status*, *Sync-Playlists*, *Oneshot-Playlists*, plus a playlist detail page: cover image, a video gallery with thumbnails, duration badges and metadata from the local `.info.json` files (like a YouTube playlist), including resolution, file size, codecs and bitrates per video. Videos that are missing (private, deleted, failed or not fetched yet) appear as a placeholder row in their playlist position, with a broken-video symbol, a status badge and the last error message; the title links to YouTube. Clicking a video opens a built-in player that streams the downloaded file (seeking via HTTP range) and continues with the next video; click the background or press ESC to close. Also on the page: all database fields, job history, and the raw file list. Titles link to the detail page, a small ↗ opens the YouTube playlist. Data is reloaded with JavaScript, the page itself is never reloaded.
 - 🔒 No Google login and no API keys: only public playlists are used.
@@ -102,6 +102,7 @@ only overwritten, nothing is deleted), start the container.
 - 🌙 The nightly sync does not start exactly on the second: it begins a random 0–30 minutes after `SYNC_CRON` (`SYNC_JITTER`), a different offset every day.
 - 🎞️ Format selection is `bv*+ba/b` (best available) merged to `mp4`, or `mkv` if the streams do not fit into mp4. Both work with Plex and Jellyfin.
 - ❓ Discovery never marks a playlist as *removed*: a playlist that is missing from the channel listing (unlisted, manually added, imported) keeps its type and keeps syncing. Only a sync run can confirm that a playlist is gone – then it becomes `removed` and switches from *sync* to *oneshot* (HTTP 403/429, network or age errors never do that). When it reappears, only the status returns to *active*, the type stays *oneshot*.
+- ⚠️ **Unlink from database** (Danger zone at the bottom of the playlist detail page) removes a playlist from the database only: the listing entries and job history go away, while videos, the download archive and a freshly written `manifest.json` stay on disk – so `python -m app.ta_import` can restore the playlist later without re-downloading anything. An existing `manifest.json` (imported playlists) is never overwritten. Channel playlists that are still on the channel come back through the next discovery run; a playlist with a queued or running job is refused.
 
 ## ➕ Adding a playlist manually
 
@@ -286,7 +287,9 @@ database row with its listing entries and jobs, the download archives in `/confi
 and `/data/archives`, and the playlist folder – which is moved into `/data/.quarantine`
 instead of being deleted. Use it before re-importing the same playlist from another source:
 the importer alone would keep the stale listing rows, the old download archive and the old
-files next to the new ones.
+files next to the new ones. To remove a playlist from the database *while keeping
+everything on disk*, use **Unlink from database** in the UI instead (see behaviour notes) –
+`forget` is the heavier tool that also clears the archives and quarantines the folder.
 
 ```bash
 docker compose stop yt-playlist-sync
@@ -316,9 +319,10 @@ docker compose up -d
   nightly run) and is the only undo besides the quarantined folder.
 - A folder whose database row is already gone is found by its `… [<playlist_id>]` suffix and
   cleaned up as well.
-- This is the single documented exception to the *never delete* rule: it is manual, offline,
-  reports first and backs up first (`SPEC.md` §15). The runtime itself still never removes
-  anything.
+- Together with the runtime *Unlink* action this is one of the two documented exceptions
+  to the *never delete* rule (`SPEC.md` §15): `forget` is manual, offline, reports first and
+  backs up first; *Unlink* removes database rows only and leaves files, archives and a
+  re-import `manifest.json` behind.
 
 ## 🛠️ Development
 

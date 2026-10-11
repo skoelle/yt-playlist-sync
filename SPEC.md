@@ -23,7 +23,7 @@ Ein selbst gehosteter Dienst, der die **öffentlichen Playlists eines YouTube-Ka
 - Keine Audio-Konvertierung, keine Änderung an YouTube-Playlists.
 - Keine Medienserver-Anbindung (Plex, Jellyfin), die Dateien sind aber kompatibel.
 - Kein Login in der App (kommt später über Authelia davor).
-- Kein Löschen von Dateien, Archive-Einträgen oder Playlists.
+- Kein Löschen von Dateien oder Archive-Einträgen; das Entfernen von Playlists aus der DB ist auf Unlink und die Wartungs-CLI `forget` beschränkt (15).
 - Keine mehreren Accounts oder Kanäle.
 
 ## 3. Begriffe
@@ -226,6 +226,7 @@ Unter `/api`, JSON. `{id}` ist die interne Playlist-ID.
 | POST | `/api/playlists/{id}/rerun` | Full Re-Run |
 | POST | `/api/playlists/{id}/ignore` | `{"ignored": true}` |
 | POST | `/api/playlists/{id}/type` | `{"type": "sync"}` |
+| POST | `/api/playlists/{id}/unlink` | Playlist aus der DB entfernen (Unlink, Danger zone der Detailseite): vorher Re-Import-`manifest.json` schreiben (vorhandene nie überschreiben) und lokale Video-IDs append-only ins Download-Archiv mergen; Dateien und Archive bleiben liegen; 409 bei offenem Job (siehe 15) |
 | POST | `/api/jobs/{id}/cancel` | Job abbrechen |
 | GET | `/healthz` | Liveness |
 
@@ -237,7 +238,7 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - **Sync-Playlists:** Summenzeile (`n Sync-Playlists | Videos | Size` in `#sync-summary`, Erklärtext aus v1.0 ersetzt), Titel (verlinkt auf die Detailseite, kleiner ↗-Link nach YouTube), Videos, Size, letzter und nächster Sync, Status, Aktionen (**Sync now**, **Ignore**, **Mark as oneshot**). Sortierbar nach Titel (Standard, aufsteigend), Videos, Size, letztem Sync und Status, eigenes Sortier-Zustand je Tab; „Next sync" ist nicht sortierbar, weil dort derselbe Scheduler-Zeitpunkt in jeder Zeile steht.
 - **Oneshot-Playlists:** standardmäßig nach Titel sortiert (aufsteigend, wie die Sync-Playlists; eigener Sortier-Zustand je Tab), zusätzlich sortierbar nach Download-Datum, Songs, Size, Duration und Status, Songs inkl. übersprungen/fehlgeschlagen (`not available`/`failed`), Size, Duration, Status, Aktionen (**Download now** bei `new` und `idle`, **Retry** bei `failed`, **Full Re-Run** bei `done`, **Log** bei vorhandenem Job, **Mark as sync**), Summenzeile. `GET /api/playlists?type=oneshot` liefert ebenfalls Titelreihenfolge.
 - **Hinzufügen:** über beiden Playlist-Tabellen ein Formular (URL oder Playlist-ID, optionaler Titel, Button **Add playlist**); der Typ folgt dem aktiven Tab. Der Server validiert via yt-dlp, Fehler erscheinen als Text neben dem Formular (kein Alert, kein Reload), danach aktualisiert die Liste sofort. Manuelle Playlists tragen ein `manual`-Badge am Titel. Unter 768 px stehen die Eingabefelder als Blöcke über der Kartenliste.
-- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Size) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Views und darunter eine Meta-Zeile mit technischen Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate), vorhandene Sidecar-Dateien als Chips – live gepollt. Fehlende Videos erscheinen als **Platzhalter-Zeile** an ihrer Playlist-Position: gebrochenes Video-Symbol statt Thumbnail, Badge (`unavailable`, `failed`, `not downloaded`, `file missing`), der bekannte Grund (Fehlermeldung) als Textzeile, Titel verlinkt auf YouTube statt auf den lokalen Player, der Player überspringt diese Zeilen. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC oder Klick auf den Hintergrund schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „All files" und der Job-Verlauf der Playlist mit Log-Buttons.
+- **Detailseite:** Kopf mit Zurück-Link, Playlist-Cover, Titel, Typ-/Status-Badges, Stats-Zeile (Videos, Gesamtdauer, Size) und kleinem YouTube-Link; Aktionen (je nach Status). Videogalerie im YouTube-Listenstil: Thumbnail mit Dauer-Badge, Titel, Kanal · Datum · Views und darunter eine Meta-Zeile mit technischen Daten aus der `.info.json` (Auflösung, Dateigröße, Video-/Audio-Codec mit Bitrate), vorhandene Sidecar-Dateien als Chips – live gepollt. Fehlende Videos erscheinen als **Platzhalter-Zeile** an ihrer Playlist-Position: gebrochenes Video-Symbol statt Thumbnail, Badge (`unavailable`, `failed`, `not downloaded`, `file missing`), der bekannte Grund (Fehlermeldung) als Textzeile, Titel verlinkt auf YouTube statt auf den lokalen Player, der Player überspringt diese Zeilen. Klick auf Thumbnail oder Titel öffnet den lokalen Player (Lichtbox, `<video>` auf das Streaming-Endpunkt): Vor/Zurück-Buttons, beim Ende läuft das nächste Video, ESC oder Klick auf den Hintergrund schließt, YouTube-Link als Fallback. Darunter alle DB-Felder als KV-Tabelle, die rohe Dateiliste zugeklappt in „All files", der Job-Verlauf der Playlist mit Log-Buttons und ganz unten eine **Danger zone** mit Button **Unlink from database** (Bestätigung ja/nein; entfernt nur die DB-Zeilen, Dateien bleiben – siehe 15). Nach erfolgreichem Unlink wechselt die UI sofort zurück zur vorherigen Ansicht (kein Seiten-Reload).
 - Dark Mode, relative Zeiten mit Tooltip, responsive.
 - **Responsive (Breakpoint 768 px):** unterhalb davon klappt die UI auf Mobile um. Die Nav zeigt `Sync`/`Oneshot` ohne `-Playlists`-Suffix (Links brechen nie mitten im Wort um; `nav` ist Flex mit Gap). Die vier Datentabellen (Sync, Oneshot, Recent jobs, Job history) werden aus Tabelle zu Karten: Titel als Kartenkopf, darunter Label/Wert-Paare pro Zelle (`data-label`), Aktionen als Button-Reihe mit Trennlinie; die Job-ID-Spalte entfällt. Die Spalten-Kopfzeile wird zur Reihe aus Sortier-Chips (nur `th[data-sort]`), Sortierung bleibt nutzbar. Kein horizontales Scrollen mehr. Über dem Breakpoint bleibt das klassische Tabellenlayout unverändert.
 
@@ -313,8 +314,44 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - Neu: Das yt-dlp-Update ist race-frei: pip installiert in ein Staging unter `/config/ytdlp-libs/`, `/config/ytdlp-lib` wird als Symlink atomar umgehängt, Queue und Discovery halten während des Tauschs an – behebt `ModuleNotFoundError: yt_dlp.extractor.youtube` beim Abgreifen einer halbfertigen Bibliothek (siehe 6.7).
 - Geändert: Die Fehlermeldung (`jobs.error_summary`) wird in Job-Verlauf und Playlist-Tabellen auf eine Zeile gekürzt (Ellipse, Hover zeigt den vollen Text, vollständig bleibt das Job-Log) – lange Tracebacks zerlegen die Tabellen nicht mehr.
 - Neu: Manuelles Eintragen von Playlists (Formular in den Sync-/Oneshot-Tabs, URL oder ID, optionaler Titel; Validierung via `yt-dlp --flat-playlist -J` ohne Login, auch für unlisted; Spalte `playlists.manual`, Migration `0003`, `POST /api/playlists`; kein Auto-Enqueue, kein Löschen) – siehe 6.10, 7, 8, 9.
+- Neu: Unlink einer Playlist aus der UI/API (`POST /api/playlists/{id}/unlink`, Danger zone der Detailseite): entfernt `playlists`/`playlist_entries`/`jobs` (FK-Reihenfolge, `runs` bleiben), schreibt vorher eine Re-Import-`manifest.json` aus dem Listing-Snapshot (vorhandene wird nie überschrieben) und mergt die Video-IDs der lokalen Dateien append-only ins Download-Archiv – Dateien und Archive bleiben liegen; zweite dokumentierte Ausnahme zur Regel „nie löschen" (siehe 15).
 
-## 15. Wartungs-CLI `app.forget`
+## 15. Playlists entfernen: Unlink und Wartungs-CLI `app.forget`
+
+Es gibt genau zwei dokumentierte Ausnahmen zur Regel „nie löschen" (Abschnitte 2 und 6):
+der Laufzeit-Endpunkt **Unlink** (API/UI) und die Offline-Wartungs-CLI **`app.forget`**.
+Beide entfernen nur DB-Zeilen (Unlink) bzw. DB-Zeilen, Archive und Ordner (`forget`);
+Dateien gehen nie stillschweigend verloren.
+
+### Unlink (API/UI)
+
+`POST /api/playlists/{id}/unlink` (Button **Unlink from database** in der Danger zone der
+Detailseite) entfernt eine Playlist aus der laufenden App **nur aus der Datenbank**:
+`playlist_entries` → `jobs` → `playlists` (FK-Reihenfolge, die Engine läuft mit
+`PRAGMA foreign_keys=ON`; `runs` hängen nicht an Playlists und bleiben). Videos, Sidecars
+und das Download-Archiv bleiben auf der Platte. Davor, in dieser Reihenfolge:
+
+1. **Guard:** `state` in `queued`/`running` oder ein Job in `queued`/`running` → 409
+   „playlist has an open job". Derselbe Guard wird nach der Dateiarbeit unmittelbar vor
+   dem Löschen erneut geprüft (Race mit einem parallel angestoßenen Job).
+2. **Manifest:** Existiert der Zielordner und liegt keine `manifest.json` darin, wird aus
+   dem Listing-Snapshot (`playlist_entries`) eine für `ta_import` lesbare `manifest.json`
+   geschrieben (`playlist_id`, `title`, `folder_name`, `entries` mit `position`, `video_id`,
+   `title`, `duration_s`); eine bereits vorhandene `manifest.json` (Import-Herkunft) wird
+   nie überschrieben.
+3. **Archiv:** Die Video-IDs der lokal vorhandenen Videodateien werden append-only ins
+   Download-Archiv `<config>/archives/<playlist_id>.txt` gemergt (gleiche Regel wie beim
+   Import, `ytdlp.append_archive`), damit ein späteres Wieder-Hinzufügen nichts neu
+   herunterlädt.
+4. **Datenbank:** siehe oben. Reihenfolge Dateiarbeit → DB: schlägt die Dateiarbeit fehl,
+   bleibt die Playlist unangetastet und der Lauf ist wiederholbar.
+
+Channel-Playlists, die weiterhin auf dem Kanal liegen, werden beim nächsten Discovery-Lauf
+wieder angelegt (gleiches Verhalten wie nach `forget`); ein Wiederherstellen ohne Discovery
+ist `python -m app.ta_import` mit `DATA_DIR` als Quelle. Unlink braucht kein gestopptes
+Verfahren, aber die Playlist darf keinen offenen Job haben.
+
+### Wartungs-CLI `app.forget`
 
 `python -m app.forget --playlist <id> [--playlist <id> …]` räumt die Spuren einer Playlist
 weg, bevor sie aus einer anderen Quelle neu importiert wird. Ohne diesen Schritt würden beim
@@ -340,12 +377,14 @@ Vor dem ersten Eingriff (nur mit `--apply`) legt der Lauf ein DB-Backup (sqlite3
 und ein `archives-*.tar.gz` nach `BACKUP_DIR` an, gleiche Rotation wie der Nachtlauf;
 `--no-backup` überspringt beides. Ohne `--apply` berichtet das Kommando nur und schreibt
 gar nichts. Exit-Codes wie bei `ta_import`: `0` in Ordnung, `1` verweigert/fehlgeschlagen,
-`2` Usage- oder Datenbankproblem. Die Runtime löscht weiterhin nichts.
+`2` Usage- oder Datenbankproblem. Die Runtime löscht weiterhin keine Dateien, Archive oder
+Ordner (Unlink entfernt DB-Zeilen, siehe oben).
 
-**Ausnahme zur Regel „nie löschen" (Abschnitte 2 und 6):** `forget` ist die einzige Stelle,
-die DB-Einträge, Archive oder Ordner entfernt. Sie ist manuell, läuft nur gegen eine
-gestoppte App, ist standardmäßig ein Trockenlauf und legt vorher ein Backup an – niemals
-Teil eines Laufzeitpfads.
+**Ausnahme zur Regel „nie löschen" (Abschnitte 2 und 6):** Unlink (oben) und `forget` sind
+die einzigen Stellen, die DB-Einträge entfernen; nur `forget` entfernt zusätzlich Archive
+und Ordner. Unlink ist ein Laufzeitpfad, aber auf reine DB-Zeilen beschränkt und stets über
+die geschriebene `manifest.json` rückholbar. `forget` ist manuell, läuft nur gegen eine
+gestoppte App, ist standardmäßig ein Trockenlauf und legt vorher ein Backup an.
 
 ## 16. Offline-Export (`app.ta_export`, `app.ts_export`)
 

@@ -37,13 +37,13 @@ FastAPI (app/main.py, Lifespan)
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen, **keine** `removed`-Markierung mehr – nicht gelistete Playlists bleiben unverändert; Existenz entscheidet der Sync-Lauf), `run_discovery` mit Leerlistenschutz |
 | `app/scheduler.py` | Cron-Jobs (Sync inkl. `SYNC_JITTER`, Update, Cleanup, Backup) + Discovery als Intervall (`_schedule_discovery`/`_discovery_tick`, `DISCOVERY_INTERVAL_MIN/MAX`), Healthchecks-Pings, yt-dlp-Update via Staging unter `/config/ytdlp-libs/` + atomarem Symlink-Swap (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update), Flag `ytdlp_updating` sperrt Queue/Discovery während des Swap-Laufs |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
-| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`) |
+| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`), Unlink (`POST /playlists/{id}/unlink`) schreibt Re-Import-`manifest.json` + Archive-Merge und löscht nur DB-Zeilen (SPEC §15) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
 | `app/ta_export.py` | TubeArchivist-Export als Standalone-Skript (`python -m app.ta_export`), kein DB-Zugriff: `TaClient` (REST + Paginierung, `TA_API_HOST` Host-Header), `index_media`, `export()` schreibt Ordner/Sidecars/`manifest.json`/Archive, nie löschen, CLI + `.env`-Loader; läuft auch im Container auf der NAS (`/ta:ro` + `/export` gemountet; Hardlinks dort meist nicht möglich → `auto` fällt auf Kopie zurück); Platzierungs-/Report-Helfer importiert es aus `export_common` unter den alten Namen (`_place_file`, `_same_device`, …) |
 | `app/export_common.py` | Gemeinsamer Kern beider Exporte: `MANIFEST_NAME`/`THUMB_EXTS`, `place_file` (`.part` → rename, `auto` Hardlink→Copy-Fallback, Größen-Check mit `repair`), `write_file`, `same_device`, `safe_id`, `check_mode`, Reports `PlaylistReport`/`ExportReport` + `print_report`, `load_dotenv`, `human` |
 | `app/ts_export.py` | TubeSync-Export als Standalone-Skript (`python -m app.ts_export`): öffnet `config/db.sqlite3` **strikt read-only** (`file:…?mode=ro`), liest `sync_source`/`sync_media`/`sync_media_metadata` (`read_library`, Metadata über `media_id` sonst per `key`), schreibt dasselbe Layout/Manifest/Archive wie `ta_export` (Thumb-Sidecars, kein Cover, `description` bleibt in TubeSync); Reihenfolge `playlist_index` sonst `created`/`published`; CLI mit `TS_DB`/`TS_MEDIA_ROOT`/`TS_THUMBS_ROOT`/`TS_EXPORT_TARGET`, Exit 2 bei `TsError` |
 | `app/ta_import.py` | Offline-Import eines exportierten Baums (`python -m app.ta_import`): `scan_manifests`/`select_manifests`/`resolve_folder` (rein), `apply_import` (Upsert `playlists` + `playlist_entries` in je einer Session pro Playlist, `reason`/`unavailable` unangetastet, nie löschen), Append-only-Merge der lokal vorhandenen Videos nach `config/archives`, alle Importe werden `oneshot` (neue Zeile: `done` nur bei vollständigen Dateien sonst `idle`; ein Update stuft vorhandene Zustände nie herunter), `--dry-run` schreibt nichts |
-| `app/forget.py` | Wartungs-CLI (`python -m app.forget --playlist <id> …`, gestoppte App): `collect` (read-only Snapshot inkl. offener Jobs + Ordnerkandidaten über `[…<pid>]`-Suffix), `apply_forget` pro Playlist in einer Session, **Reihenfolge Ordner → Archive → DB** (`playlist_entries` → `jobs` → `playlists`, `foreign_keys=ON`), Ordner standardmäßig nach `<data>/.quarantine` (`--keep-folder`/`--delete-folder`+`--yes`), Guard bei `queued`/`running` oder offenem Job (Playlist `blocked`, die anderen laufen weiter), Backup (`backup_database`+`backup_archives`) nur mit `--apply`, **Default = Dry-Run**; die einzige dokumentierte Ausnahme von „nie löschen" (SPEC §15) |
+| `app/forget.py` | Wartungs-CLI (`python -m app.forget --playlist <id> …`, gestoppte App): `collect` (read-only Snapshot inkl. offener Jobs + Ordnerkandidaten über `[…<pid>]`-Suffix), `apply_forget` pro Playlist in einer Session, **Reihenfolge Ordner → Archive → DB** (`playlist_entries` → `jobs` → `playlists`, `foreign_keys=ON`), Ordner standardmäßig nach `<data>/.quarantine` (`--keep-folder`/`--delete-folder`+`--yes`), Guard bei `queued`/`running` oder offenem Job (Playlist `blocked`, die anderen laufen weiter), Backup (`backup_database`+`backup_archives`) nur mit `--apply`, **Default = Dry-Run**; eine der zwei dokumentierten Ausnahmen von „nie löschen" (SPEC §15; die andere ist Unlink in `api.py`) |
 
 Datenfluss-Regel: `runner.py` und `ytdlp.py` haben **keinen** DB-Zugriff. DB-Logik lebt in `jobqueue.py`, `discovery.py`, `api.py` – **Ausnahme:** `ta_import.py` und `forget.py` schreiben dieselben Tabellen offline (CLI, kein Laufzeitpfad, dokumentiert wie `backup.py`). `ts_export.py` liest fremde Daten (TubeSync-SQLite) strikt read-only.
 
@@ -96,13 +96,13 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **178 Tests grün** (`pytest -q`, ~28 s).
+- Bestehender Stand: **184 Tests grün** (`pytest -q`, ~40 s).
 
 ## Harte Regeln
 
 Aus `SPEC.md` §2/§6 und `PLAN.md` „Regeln für den Agenten“:
 
-1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_run`), Temp-Dateien in Temporärverzeichnissen und die Wartungs-CLI `forget` (`app/forget.py` – nur manuell, nur gestoppte App, Default Dry-Run, vorher Backup, Ordner wandert nach `.quarantine`; SPEC §15).
+1. **Nie löschen.** Keine Videos, Archive-Einträge, DB-Einträge oder Playlists entfernen. Ausnahmen: Job-Logdateien älter als `LOG_RETENTION_DAYS` (`scheduler.cleanup_logs`), Backup-Kopien jenseits der letzten `BACKUP_KEEP` (`scheduler.backup_run`), Temp-Dateien in Temporärverzeichnissen, die Wartungs-CLI `forget` (`app/forget.py` – nur manuell, nur gestoppte App, Default Dry-Run, vorher Backup, Ordner wandert nach `.quarantine`) und die Laufzeit-Unlink-Funktion `POST /api/playlists/{id}/unlink` (nur DB-Zeilen, nie Dateien oder Archive; beide Ausnahmen: SPEC §15).
 2. **Ein Worker.** Niemals Parallelität von Downloads einführen (ein offener Job pro Playlist, `PRIORITY`-Map: manual/retry/full_rerun=0 > discovery=1 > nightly=2).
 3. **Keine privaten Daten im Repo.** Nur Platzhalter (`@beispielkanal`, leere HC-URLs); die öffentliche Image-URL ist `ghcr.io/skoelle/yt-playlist-sync`. `.env` bleibt in `.gitignore`.
 4. **Kein YouTube-Login, keine Secrets, kein API-Key.** `DATABASE_URL` und Healthchecks-URLs sind Deployment-Detail.
@@ -139,7 +139,7 @@ steht – das gilt für jede weitere Bearbeitung:
 
 | Datei | Wofür | Rein | Niemals rein |
 |---|---|---|---|
-| `SPEC.md` | Quelle der Wahrheit für **Verhalten** (normativ, deutsch): Zweck, Anforderungen, ENV, API, Datenmodell, Abnahme, §14 Changelog (anfügen, nichts strichen), §15 Regel-Ausnahme (`forget`), §16/§17 Offline-Export/Import, technische Offene Punkte | jede Verhaltensänderung, dazu Migration und Test | How-to, Begründungen, Status/Checklisten |
+| `SPEC.md` | Quelle der Wahrheit für **Verhalten** (normativ, deutsch): Zweck, Anforderungen, ENV, API, Datenmodell, Abnahme, §14 Changelog (anfügen, nichts strichen), §15 Regel-Ausnahmen (`Unlink`, `forget`), §16/§17 Offline-Export/Import, technische Offene Punkte | jede Verhaltensänderung, dazu Migration und Test | How-to, Begründungen, Status/Checklisten |
 | `README.md` | Nutzer & Betreiber (englisch): Quick start, Konfiguration, Volumes, Backup/Restore, Export/Import/Forgetting, Projektstruktur | Bedienanleitungen, ENV-Spalten, Deployment-Hinweise | interne Entscheidungen, Spezifikationstexte, TODOs |
 | `AGENTS.md` | Regeln und Orientierung für die Arbeit am Code (diese Datei): Architektur, Befehle, Test-/Lint-Pflichten, harte Regeln, CI/CD, diese Dokumentationskarte | was vor dem ersten Eingriff gelten muss | Status, Changelog, Nutzeranleitung |
 | `PLAN.md` | Status & Warum: Umsetzungsstand (Testzahlen), **Entscheidungslog** (append-only: Begründung, Alternative, Warum-gegen-um), priorisierte offene Punkte, Regeln für den Agenten | neue Entscheidungen, neue offene Punkte – bestehende Einträge nicht löschen | Verhalten (→ `SPEC.md`), How-to (→ `README.md`), erledigte Phasen-Checklisten |
@@ -149,7 +149,7 @@ Nicht ins Repo: persönliche Lauf- und Migrationsprotokolle (welche Playlist wan
 übernommen wurde), echte Pfade, IDs oder Titel aus den eigenen Datenbeständen – sie
 gehören ins Arbeitsprotokoll, nicht ins Werkzeug.
 
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (178), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (184), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License
