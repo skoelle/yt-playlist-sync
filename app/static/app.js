@@ -357,6 +357,7 @@ function renderDetail(p, f, vids) {
   const ahtml = acts.join(" ");
   const abox = $("#detail-actions");
   if (abox._html !== ahtml) { abox.innerHTML = ahtml; abox._html = ahtml; }
+  $("#detail-unlink").dataset.id = p.id;
 
   const kv = [
     ["Playlist ID", `<code>${esc(p.playlist_id)}</code>`],
@@ -544,6 +545,7 @@ function renderDetailLoading() {
   $("#detail-files-wrap").hidden = true;
   $("#detail-files-table tbody").innerHTML = "";
   $("#detail-jobs-table tbody").innerHTML = "";
+  $("#detail-unlink").removeAttribute("data-id");
 }
 
 function showTab() {
@@ -582,6 +584,12 @@ async function act(action, el) {
       case "to-sync":
         if (!confirm("Treat this playlist as a sync playlist from now on?")) return;
         await api(`/playlists/${id}/type`, { method: "POST", body: { type: "sync" } }); break;
+      case "unlink":
+        if (!id) return;
+        if (!confirm("Unlink this playlist from the database? Videos, the download archive and manifest.json stay on disk so it can be re-imported later. Channel playlists are re-added by the next discovery run.")) return;
+        await api(`/playlists/${id}/unlink`, { method: "POST" });
+        location.hash = state.detailFrom;
+        return;
       case "cancel": await api(`/jobs/${job}/cancel`, { method: "POST" }); break;
       case "cancel-current":
         if (state.status && state.status.current) await api(`/jobs/${state.status.current.job_id}/cancel`, { method: "POST" });

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,13 +13,15 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from .db import session_scope, utcnow
+from .export_common import MANIFEST_NAME, write_file
 from .models import Job, Playlist, PlaylistEntry, Run
 from .ytdlp import (
     YtDlpError,
+    append_archive,
     list_playlist_entries,
     playlist_id_from_url,
     read_archive,
@@ -368,6 +371,83 @@ async def set_playlist_type(pid: int, body: TypeBody) -> dict[str, Any]:
             pl.state = "done"
             pl.completed_at = pl.completed_at or pl.last_sync_at
     return {"type": body.type}
+
+
+def _open_job_count(s, playlist_pk: int) -> int:
+    return int(
+        s.scalar(
+            select(func.count())
+            .select_from(Job)
+            .where(Job.playlist_id == playlist_pk, Job.status.in_(("queued", "running")))
+        )
+        or 0
+    )
+
+
+def _write_reimport_manifest(
+    cfg, playlist_id: str, title: str, folder_name: str | None, entries: list[dict[str, Any]]
+) -> bool:
+    """Write a ta_import-compatible ``manifest.json`` next to the files.
+
+    An imported playlist already carries its marker; ``write_file`` never
+    overwrites an existing manifest. Returns True when one was written.
+    """
+    folder = _playlist_folder(cfg, folder_name)
+    if folder is None or not folder.is_dir():
+        return False
+    payload = {
+        "source": "yt-playlist-sync",
+        "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "playlist_id": playlist_id,
+        "title": title,
+        "folder_name": folder_name,
+        "entries": entries,
+    }
+    data = json.dumps(payload, ensure_ascii=False, indent=1).encode("utf-8")
+    return write_file(folder / MANIFEST_NAME, data, dry_run=False)
+
+
+def _merge_local_archive(cfg, playlist_id: str, folder_name: str | None) -> int:
+    """Append the ids of local video files to the download archive (append-only)."""
+    folder = _playlist_folder(cfg, folder_name)
+    if folder is None or not folder.is_dir():
+        return 0
+    ids = [v["video_id"] for v in read_video_entries(folder, playlist_id)["videos"] if v["video_id"]]
+    return append_archive(cfg.config_dir / "archives" / f"{playlist_id}.txt", ids, dry_run=False)
+
+
+@router.post("/playlists/{pid}/unlink")
+async def unlink_playlist(pid: int, request: Request) -> dict[str, Any]:
+    """Unlink a playlist from the database; files and archives stay (SPEC 15).
+
+    Before the rows go away a re-import manifest.json is written (unless one
+    is already there, i.e. the playlist came from an import) and the local
+    video ids are merged into the download archive, so ``app.ta_import``
+    can restore the playlist later without re-downloading anything.
+    """
+    cfg = request.app.state.settings
+    with session_scope() as s:
+        pl = _get_playlist(s, pid)
+        if pl.state in ("queued", "running") or _open_job_count(s, pl.id):
+            raise HTTPException(409, "playlist has an open job")
+        entries = [
+            {"position": e.position, "video_id": e.video_id, "title": e.title,
+             "duration_s": e.duration_s}
+            for e in s.scalars(
+                select(PlaylistEntry).where(PlaylistEntry.playlist_id == pl.id)
+                .order_by(PlaylistEntry.position, PlaylistEntry.video_id)
+            ).all()
+        ]
+        playlist_id, title, folder_name = pl.playlist_id, pl.title, pl.folder_name
+        _write_reimport_manifest(cfg, playlist_id, title, folder_name, entries)
+        _merge_local_archive(cfg, playlist_id, folder_name)
+        # a job may have been enqueued while the files were written
+        if pl.state in ("queued", "running") or _open_job_count(s, pl.id):
+            raise HTTPException(409, "playlist has an open job")
+        s.execute(delete(PlaylistEntry).where(PlaylistEntry.playlist_id == pl.id))
+        s.execute(delete(Job).where(Job.playlist_id == pl.id))
+        s.delete(pl)
+    return {"unlinked": True}
 
 
 @router.get("/jobs")
