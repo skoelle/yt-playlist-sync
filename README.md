@@ -93,7 +93,7 @@ only overwritten, nothing is deleted), start the container.
 
 ## 📝 Behaviour notes
 
-- ✅ A oneshot counts as **done** when every video is in the yt-dlp archive or is permanently unavailable (private, deleted, age or members only). Otherwise it is **failed**; use *Retry* in the UI. Retries only fetch what is missing.
+- ✅ A oneshot counts as **done** when every video is in the yt-dlp archive or is permanently unavailable (private, deleted, age, members only, or region blocked). Otherwise it is **failed**; use *Retry* in the UI. Retries only fetch what is missing.
 - 🔁 *Full Re-Run* re-checks a finished oneshot against the archive and downloads whatever is missing. Existing files and archives are never deleted.
 - ⏸️ If YouTube answers with HTTP 429 or a bot check, the current job stops and the queue pauses for 30 minutes.
 - 🚫 The same happens on HTTP 403 while downloading (`unable to download video data`): the job stops immediately instead of grinding through the playlist, the playlist shows *failed*, and a yt-dlp update check is triggered during the pause.

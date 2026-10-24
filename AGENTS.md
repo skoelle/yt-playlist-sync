@@ -96,7 +96,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **184 Tests grün** (`pytest -q`, ~40 s).
+- Bestehender Stand: **185 Tests grün** (`pytest -q`, ~95 s).
 
 ## Harte Regeln
 
@@ -149,7 +149,7 @@ Nicht ins Repo: persönliche Lauf- und Migrationsprotokolle (welche Playlist wan
 übernommen wurde), echte Pfade, IDs oder Titel aus den eigenen Datenbeständen – sie
 gehören ins Arbeitsprotokoll, nicht ins Werkzeug.
 
-- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (184), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
+- Bekannter Ist-Stand beim Schreiben: `pytest -q` grün (185), `ruff check .` sauber, `node --check app/static/app.js` ok. Keine offenen Test-Punkte laut PLAN.md mehr.
 - Verzeichnisse `@eaDir/` mit `*SynoEAStream`-Dateien sind Synology-Metadaten, kein Code – nicht bearbeiten, nicht als Quelltext behandeln.
 
 ## License

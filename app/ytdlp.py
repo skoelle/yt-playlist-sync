@@ -31,7 +31,8 @@ _FORBIDDEN = re.compile(r"HTTP Error 403", re.I)
 _PERMANENT = re.compile(
     r"Video unavailable|Private video|video is private|has been removed|no longer available|"
     r"account .* terminated|members-only|Join this channel|confirm your age|age-restricted|"
-    r"not available in your country|blocked it|copyright|This video is not available",
+    r"not (?:made this video )?available in your country|blocked it|copyright|"
+    r"This video is not available",
     re.I,
 )
 # Playlist-level verdicts: a playlist that no longer exists or is not accessible to us.

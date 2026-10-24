@@ -143,7 +143,7 @@ yt-dlp \
 
 ### 6.4 Oneshot-Logik
 - Erster Lauf lädt komplett.
-- **`done`**, wenn jedes Video im Archive steht oder dauerhaft unavailable ist (privat, gelöscht, Alters- oder Mitglieder-Beschränkung). Diese zählen als `skipped`.
+- **`done`**, wenn jedes Video im Archive steht oder dauerhaft unavailable ist (privat, gelöscht, Alters-, Mitglieder- oder Länder-Beschränkung). Diese zählen als `skipped`.
 - **`failed`**, wenn Videos fehlen, die nicht dauerhaft unavailable sind. Die UI zeigt Fehlerzahl, Meldung und **Retry** (lädt nur das Fehlende).
 - Bei `done` wird die Playlist nie wieder automatisch angefasst. Kein Auto-Retry bei `failed`.
 - **Full Re-Run** prüft eine fertige Oneshot erneut gegen das Archive und lädt nur Fehlendes. Nichts wird gelöscht.
@@ -315,6 +315,7 @@ Single Page ohne Framework. **Die UI-Texte sind Englisch** (Buttons, Spalten-Hea
 - Geändert: Die Fehlermeldung (`jobs.error_summary`) wird in Job-Verlauf und Playlist-Tabellen auf eine Zeile gekürzt (Ellipse, Hover zeigt den vollen Text, vollständig bleibt das Job-Log) – lange Tracebacks zerlegen die Tabellen nicht mehr.
 - Neu: Manuelles Eintragen von Playlists (Formular in den Sync-/Oneshot-Tabs, URL oder ID, optionaler Titel; Validierung via `yt-dlp --flat-playlist -J` ohne Login, auch für unlisted; Spalte `playlists.manual`, Migration `0003`, `POST /api/playlists`; kein Auto-Enqueue, kein Löschen) – siehe 6.10, 7, 8, 9.
 - Neu: Unlink einer Playlist aus der UI/API (`POST /api/playlists/{id}/unlink`, Danger zone der Detailseite): entfernt `playlists`/`playlist_entries`/`jobs` (FK-Reihenfolge, `runs` bleiben), schreibt vorher eine Re-Import-`manifest.json` aus dem Listing-Snapshot (vorhandene wird nie überschrieben) und mergt die Video-IDs der lokalen Dateien append-only ins Download-Archiv – Dateien und Archive bleiben liegen; zweite dokumentierte Ausnahme zur Regel „nie löschen" (siehe 15).
+- Behoben: Die yt-dlp-Meldung „The uploader has not made this video available in your country" zählt jetzt als dauerhaft unavailable (Länder-Beschränkung) statt als fehlendes Video; der Job bleibt `success`, das Video erscheint als `skipped` (siehe 6.4).
 
 ## 15. Playlists entfernen: Unlink und Wartungs-CLI `app.forget`
 

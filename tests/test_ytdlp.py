@@ -64,6 +64,10 @@ def test_parse_line_error_classes():
     assert e["id"] == "abcdefghijk" and e["permanent"] and not e["ratelimit"]
     e = ytdlp.parse_line("ERROR: [youtube] abcdefghijk: Private video. Sign in if you've been granted access")
     assert e["permanent"]
+    e = ytdlp.parse_line(
+        "ERROR: [youtube] abcdefghijk: The uploader has not made this video available in your country"
+    )
+    assert e["permanent"] and not e["ratelimit"] and not e["forbidden"]
     e = ytdlp.parse_line("ERROR: [youtube] abcdefghijk: HTTP Error 429: Too Many Requests")
     assert e["ratelimit"] and not e["permanent"]
     e = ytdlp.parse_line("ERROR: [youtube] abcdefghijk: Sign in to confirm you\u2019re not a bot")

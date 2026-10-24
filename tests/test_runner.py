@@ -54,6 +54,13 @@ def test_permanent_unavailable_counts_as_skipped(tmp_path, stub):
     assert res.success and res.skipped == 1 and res.new_count == 2 and res.failed == 0
 
 
+def test_region_blocked_counts_as_skipped(tmp_path, stub):
+    stub.data_ref["fail"] = {"vid00000002": "region"}
+    stub.save()
+    res = run(params(tmp_path, stub))
+    assert res.success and res.skipped == 1 and res.new_count == 2 and res.failed == 0
+
+
 def test_private_marker_in_listing_is_skipped(tmp_path, stub):
     stub.data_ref["playlists"]["PLaaa"][1]["title"] = "[Private video]"
     stub.data_ref["fail"] = {"vid00000002": "unavailable"}

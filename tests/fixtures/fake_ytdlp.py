@@ -60,6 +60,12 @@ def main():
             log_err(f"ERROR: [youtube] {vid}: Video unavailable")
             errors += 1
             continue
+        if mode == "region":
+            log_err(
+                f"ERROR: [youtube] {vid}: The uploader has not made this video available in your country"
+            )
+            errors += 1
+            continue
         if mode == "temporary":
             log_err(
                 f"ERROR: [youtube] {vid}: Unable to download webpage: "
