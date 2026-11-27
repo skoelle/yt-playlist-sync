@@ -22,6 +22,7 @@ from .models import Job, Playlist, PlaylistEntry, Run
 from .ytdlp import (
     YtDlpError,
     append_archive,
+    find_video_entries,
     list_playlist_entries,
     playlist_id_from_url,
     read_archive,
@@ -132,14 +133,16 @@ async def playlists(type: str | None = Query(None, pattern="^(sync|oneshot)$")) 
     return out
 
 
-def _search_status(entry: PlaylistEntry, archived: set[str]) -> str:
+def _search_status(entry: PlaylistEntry, archived: set[str], local: bool) -> str:
     """Download/availability state of one playlist entry (mirrors ``_missing_entry``)."""
+    if local:
+        return "downloaded"
     if entry.unavailable:
         return "unavailable"
     if entry.reason:
         return "failed"
     if entry.video_id in archived:
-        return "downloaded"
+        return "archived"
     return "pending"
 
 
@@ -180,6 +183,7 @@ async def search(
             .order_by(Playlist.title, PlaylistEntry.position)
         ).all()
         archives: dict[str, set[str]] = {}
+        local_media: dict[int, dict[str, dict[str, Any]]] = {}
         grouped: dict[str, dict[str, Any]] = {}
         for entry, pl in rows:
             item = grouped.get(entry.video_id)
@@ -187,19 +191,25 @@ async def search(
                 item = {
                     "video_id": entry.video_id, "title": entry.title or entry.video_id,
                     "duration_s": entry.duration_s, "unavailable": entry.unavailable,
-                    "playlists": [],
+                    "media": None, "playlists": [],
                 }
                 grouped[entry.video_id] = item
             archived = archives.get(pl.playlist_id)
             if archived is None:
                 archived = read_archive(cfg.config_dir / "archives" / f"{pl.playlist_id}.txt")
                 archives[pl.playlist_id] = archived
+            if pl.id not in local_media:
+                folder = _playlist_folder(cfg, pl.folder_name)
+                local_media[pl.id] = find_video_entries(folder, set(page)) if folder else {}
+            media = local_media[pl.id].get(entry.video_id)
             item["playlists"].append({
                 "id": pl.id, "playlist_id": pl.playlist_id, "title": pl.title, "type": pl.type,
                 "state": pl.state, "position": entry.position,
                 "remote_present": entry.remote_present, "reason": entry.reason,
-                "status": _search_status(entry, archived),
+                "status": _search_status(entry, archived, media is not None),
             })
+            if media is not None and item["media"] is None:
+                item["media"] = {**media, "playlist_id": pl.id}
     return {"query": q, "total": total, "results": [grouped[v] for v in page if v in grouped]}
 
 

@@ -190,6 +190,32 @@ def test_read_video_entries(tmp_path):
     assert out["exists"] is False and out["videos"] == [] and out["cover"] is None
 
 
+def test_find_video_entries_only_requested_ids(tmp_path: Path):
+    import json as _json
+
+    folder = tmp_path / "Mix [PL1]"
+    folder.mkdir()
+    (folder / "01 - One [aaaaaaaaaaa].mkv").write_bytes(b"v" * 10)
+    (folder / "01 - One [aaaaaaaaaaa].jpg").write_bytes(b"t")
+    (folder / "01 - One [aaaaaaaaaaa].info.json").write_text(_json.dumps({
+        "title": "One", "duration": 61, "channel": "Kanal", "width": 1920, "height": 1080,
+    }))
+    (folder / "02 - Two [bbbbbbbbbbb].mkv").write_bytes(b"v")
+    (folder / "02 - Two [bbbbbbbbbbb].info.json").write_text(_json.dumps({"title": "Two"}))
+
+    out = ytdlp.find_video_entries(folder, {"aaaaaaaaaaa"})
+    assert set(out) == {"aaaaaaaaaaa"}
+    entry = out["aaaaaaaaaaa"]
+    assert entry["file"] == "01 - One [aaaaaaaaaaa].mkv"
+    assert entry["thumb"] == "01 - One [aaaaaaaaaaa].jpg"
+    assert entry["duration_s"] == 61 and entry["channel"] == "Kanal"
+    assert entry["resolution"] == "1920x1080"
+    full = {e["video_id"]: e for e in ytdlp.read_video_entries(folder, "PL1")["videos"]}
+    assert entry == full["aaaaaaaaaaa"]
+    assert ytdlp.find_video_entries(folder, set()) == {}
+    assert ytdlp.find_video_entries(tmp_path / "nope", {"aaaaaaaaaaa"}) == {}
+
+
 def test_is_gone():
     assert ytdlp.is_gone("Could not list playlist: ERROR: [youtube:playlist] PL1: "
                          "The playlist does not exist")

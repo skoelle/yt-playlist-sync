@@ -258,6 +258,7 @@ const SEARCH_STATUS = {
   pending: { label: "not downloaded", cls: "s-pending" },
   failed: { label: "failed", cls: "s-failed" },
   unavailable: { label: "unavailable", cls: "s-unavailable" },
+  archived: { label: "file missing", cls: "s-archived" },
 };
 
 function renderSearch() {
@@ -276,21 +277,11 @@ function renderSearch() {
   } else {
     setText("search-status", `${plural(S.total, "video", "videos")} found`);
   }
-  list.innerHTML = S.results.map((v) => {
-    const dur = v.duration_s != null ? `<span class="vid-dur-inline">${fmtClock(v.duration_s)}</span>` : "";
-    const title = v.video_id
-      ? `<a href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}" target="_blank" rel="noopener">${esc(v.title)}</a>`
-      : esc(v.title);
-    const pls = v.playlists.map((p) => {
-      const st = SEARCH_STATUS[p.status] || { label: p.status, cls: "" };
-      return `<span class="search-pl"><a href="#playlist-${p.id}">${esc(p.title)}</a>` +
-        `<span class="badge ${st.cls}">${esc(st.label)}</span></span>`;
-    }).join("");
-    return `<div class="search-result">
-      <div class="search-result-title">${title}${dur}</div>
-      <div class="search-result-meta">${pls}</div>
-    </div>`;
-  }).join("") || `<p class="muted">No videos found.</p>`;
+  const rows = S.results.map((v) =>
+    `<tr data-key="${esc(v.video_id)}">${searchRow(v)}</tr>`).join("");
+  list.innerHTML = rows
+    ? `<div class="table-wrap"><table class="vid-table"><tbody>${rows}</tbody></table></div>`
+    : `<p class="muted">No videos found.</p>`;
   more.hidden = S.loading || S.results.length >= S.total;
 }
 
@@ -344,12 +335,26 @@ function videoKey(v) {
   return v.file || `v:${v.video_id || v.index}`;
 }
 
-function playableVideos() {
+function detailPlayerItems() {
   const vids = state.detail && state.detail.vids ? state.detail.vids.videos : [];
-  return vids.filter((v) => v.file);
+  return vids.filter((v) => v.file).map((v) => ({ ...v, playlistId: state.detailId }));
 }
 
-function missingRow(v) {
+function searchPlayerItems() {
+  return state.search.results.filter((r) => r.media).map((r) => ({
+    ...r.media, title: r.title || r.media.title, video_id: r.video_id,
+    playlistId: r.media.playlist_id,
+  }));
+}
+
+function startPlayer(items, file) {
+  const index = items.findIndex((x) => x.file === file);
+  if (index < 0) return;
+  state.player = { items, index };
+  renderPlayer();
+}
+
+function missingRow(v, extra = "") {
   const st = MISSING_STATUS[v.status] || { label: v.status, cls: "" };
   const dur = v.duration_s != null ? `<span class="vid-dur">${fmtClock(v.duration_s)}</span>` : "";
   const title = v.video_id
@@ -361,13 +366,13 @@ function missingRow(v) {
   const reason = v.reason ? `<div class="vid-reason">${esc(v.reason)}</div>` : "";
   return `<td class="vid-td-thumb"><div class="vid-thumb vid-thumb-broken">${BROKEN_ICON}</div>${dur}</td>
     <td><div class="vid-title">${title}</div>
-    <div class="vid-meta">${meta.join(" ")}</div>${reason}</td>`;
+    <div class="vid-meta">${meta.join(" ")}</div>${extra}${reason}</td>`;
 }
 
-function videoRow(v) {
-  if (v.missing) return missingRow(v);
+function videoRow(v, playlistId = state.detailId, extra = "") {
+  if (v.missing) return missingRow(v, extra);
   const thumb = v.thumb
-    ? `<img class="vid-thumb" loading="lazy" alt="" src="/api/playlists/${state.detailId}/thumb?file=${encodeURIComponent(v.thumb)}">`
+    ? `<img class="vid-thumb" loading="lazy" alt="" src="/api/playlists/${playlistId}/thumb?file=${encodeURIComponent(v.thumb)}">`
     : `<div class="vid-thumb vid-thumb-empty"></div>`;
   const dur = v.duration_s != null ? `<span class="vid-dur">${fmtClock(v.duration_s)}</span>` : "";
   const meta = [];
@@ -376,7 +381,7 @@ function videoRow(v) {
   if (up) meta.push(up);
   if (v.view_count != null) meta.push(fmtViews(v.view_count));
   const chips = (v.sidecars || []).map((s) => `<code>${esc(s)}</code>`).join(" ");
-  const play = `data-action="play" data-file="${esc(v.file)}"`;
+  const play = `data-action="play" data-file="${esc(v.file)}" data-playlist="${playlistId}"`;
   const tech = [];
   if (v.resolution) tech.push(v.resolution);
   if (v.size_bytes) tech.push(fmtBytes(v.size_bytes));
@@ -388,7 +393,33 @@ function videoRow(v) {
     <td><div class="vid-title"><a class="vid-play" ${play}>${esc(v.title)}</a></div>
     <div class="vid-meta">${meta.map(esc).join(" · ")}</div>
     ${techHtml}
-    <div class="vid-chips">${chips}</div></td>`;
+    <div class="vid-chips">${chips}</div>${extra}</td>`;
+}
+
+function searchPlaylists(v) {
+  return (v.playlists || []).map((p) => {
+    const st = SEARCH_STATUS[p.status] || { label: p.status, cls: "" };
+    return `<span class="search-pl"><a href="#playlist-${p.id}">${esc(p.title)}</a>` +
+      `<span class="badge ${st.cls}">${esc(st.label)}</span></span>`;
+  }).join("");
+}
+
+const SEARCH_MISSING_RANK = { failed: 0, unavailable: 1, archived: 2, pending: 3 };
+
+function searchRow(v) {
+  const extra = `<div class="vid-playlists">In: ${searchPlaylists(v)}</div>`;
+  if (v.media) {
+    return videoRow({ ...v.media, title: v.title || v.media.title, video_id: v.video_id },
+      v.media.playlist_id, extra);
+  }
+  const byStatus = [...(v.playlists || [])].sort((a, b) =>
+    (SEARCH_MISSING_RANK[a.status] ?? 9) - (SEARCH_MISSING_RANK[b.status] ?? 9));
+  const first = byStatus[0] || {};
+  const reason = (v.playlists || []).find((p) => p.reason);
+  return missingRow({
+    ...v, missing: true, index: first.position, status: first.status || "pending",
+    reason: reason ? reason.reason : null,
+  }, extra);
 }
 
 function renderDetail(p, f, vids) {
@@ -502,13 +533,12 @@ function closePlayer() {
 
 function renderPlayer() {
   const P = state.player;
-  const vids = playableVideos();
-  const i = P ? vids.findIndex((x) => x.file === P.file) : -1;
-  if (i < 0) { closePlayer(); return; }
-  const v = vids[i];
+  if (!P || !P.items.length) { closePlayer(); return; }
+  const i = P.index;
+  const v = P.items[i];
   $("#player").hidden = false;
   setText("player-title", v.title);
-  setText("player-count", `${i + 1} / ${vids.length}`);
+  setText("player-count", `${i + 1} / ${P.items.length}`);
   const yt = $("#player-yt");
   if (v.video_id) {
     yt.href = `https://www.youtube.com/watch?v=${v.video_id}`;
@@ -517,23 +547,22 @@ function renderPlayer() {
     yt.hidden = true;
   }
   const video = $("#player-video");
-  const src = `/api/playlists/${state.detailId}/video?file=${encodeURIComponent(v.file)}`;
+  const src = `/api/playlists/${v.playlistId}/video?file=${encodeURIComponent(v.file)}`;
   if (video.dataset.src !== src) {
     video.dataset.src = src;
     video.src = src;
     video.onended = () => playerMove(1);
   }
   $("#player-prev").disabled = i === 0;
-  $("#player-next").disabled = i >= vids.length - 1;
+  $("#player-next").disabled = i >= P.items.length - 1;
 }
 
 function playerMove(delta) {
   const P = state.player;
-  const vids = playableVideos();
-  const i = P ? vids.findIndex((x) => x.file === P.file) : -1;
-  const target = vids[i + delta];
-  if (!target) return;
-  state.player = { file: target.file };
+  if (!P) return;
+  const target = P.index + delta;
+  if (target < 0 || target >= P.items.length) return;
+  P.index = target;
   renderPlayer();
 }
 
@@ -682,7 +711,11 @@ async function act(action, el) {
         if (state.status && state.status.current) openLog(state.status.current.job_id);
         return;
       case "close-log": state.log.open = false; $("#log-panel").hidden = true; return;
-      case "play": state.player = { file: el.dataset.file }; renderPlayer(); return;
+      case "play": {
+        const items = state.tab === "search" ? searchPlayerItems() : detailPlayerItems();
+        startPlayer(items, el.dataset.file);
+        return;
+      }
       case "player-close": closePlayer(); return;
       case "player-prev": playerMove(-1); return;
       case "player-next": playerMove(1); return;

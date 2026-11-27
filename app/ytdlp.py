@@ -467,6 +467,39 @@ def _bitrate(info: dict[str, Any], key: str) -> float | None:
     return float(v) if isinstance(v, (int, float)) and v > 0 else None
 
 
+def _video_entry(d: Path, name: str, names: set[str]) -> dict[str, Any]:
+    """Build one gallery entry for a video file; shared by the listing helpers."""
+    p = d / name
+    stem = p.stem
+    m = _STEM.match(stem)
+    index = int(m.group(1)) if m else 0
+    video_id = m.group(3) if m else ""
+    info = _read_info(d / f"{stem}.info.json")
+    title = str(info.get("title") or (m.group(2) if m else stem))
+    duration = info.get("duration")
+    thumb = next((f"{stem}{e}" for e in _THUMB_EXTS if f"{stem}{e}" in names), None)
+    sidecars = [p.suffix[1:]] + [s.lstrip(".") for s in _SIDECARS if f"{stem}{s}" in names]
+    try:
+        size = p.stat().st_size
+    except OSError:
+        size = 0
+    return {
+        "index": index, "video_id": video_id, "title": title, "file": name,
+        "thumb": thumb,
+        "duration_s": duration if isinstance(duration, (int, float)) else None,
+        "upload_date": info.get("upload_date"),
+        "view_count": info.get("view_count"),
+        "like_count": info.get("like_count"),
+        "channel": info.get("channel") or info.get("uploader"),
+        "resolution": _resolution(info),
+        "vcodec": _codec(info, "vcodec"),
+        "acodec": _codec(info, "acodec"),
+        "vbr": _bitrate(info, "vbr"),
+        "abr": _bitrate(info, "abr"),
+        "size_bytes": size, "sidecars": sidecars,
+    }
+
+
 def read_video_entries(folder: Path | str, playlist_id: str) -> dict[str, Any]:
     """Parse a yt-dlp playlist folder into a cover plus per-video gallery entries.
 
@@ -483,39 +516,10 @@ def read_video_entries(folder: Path | str, playlist_id: str) -> dict[str, Any]:
         names = sorted(os.listdir(d))
     except OSError:
         return empty
-    entries: list[dict[str, Any]] = []
-    for name in names:
-        p = d / name
-        if p.suffix.lower() not in _VIDEO_EXTS:
-            continue
-        stem = p.stem
-        m = _STEM.match(stem)
-        index = int(m.group(1)) if m else 0
-        video_id = m.group(3) if m else ""
-        info = _read_info(d / f"{stem}.info.json")
-        title = str(info.get("title") or (m.group(2) if m else stem))
-        duration = info.get("duration")
-        thumb = next((f"{stem}{e}" for e in _THUMB_EXTS if (d / f"{stem}{e}").is_file()), None)
-        sidecars = [p.suffix[1:]] + [s.lstrip(".") for s in _SIDECARS if (d / f"{stem}{s}").is_file()]
-        try:
-            size = p.stat().st_size
-        except OSError:
-            size = 0
-        entries.append({
-            "index": index, "video_id": video_id, "title": title, "file": name,
-            "thumb": thumb,
-            "duration_s": duration if isinstance(duration, (int, float)) else None,
-            "upload_date": info.get("upload_date"),
-            "view_count": info.get("view_count"),
-            "like_count": info.get("like_count"),
-            "channel": info.get("channel") or info.get("uploader"),
-            "resolution": _resolution(info),
-            "vcodec": _codec(info, "vcodec"),
-            "acodec": _codec(info, "acodec"),
-            "vbr": _bitrate(info, "vbr"),
-            "abr": _bitrate(info, "abr"),
-            "size_bytes": size, "sidecars": sidecars,
-        })
+    nameset = set(names)
+    entries = [
+        _video_entry(d, name, nameset) for name in names if Path(name).suffix.lower() in _VIDEO_EXTS
+    ]
     entries.sort(key=lambda e: (e["index"], e["file"]))
     return {
         "exists": True, "cover": _find_cover(names, playlist_id),
@@ -523,3 +527,28 @@ def read_video_entries(folder: Path | str, playlist_id: str) -> dict[str, Any]:
         "total_duration_s": int(sum(e["duration_s"] for e in entries if e["duration_s"])),
         "videos": entries,
     }
+
+
+def find_video_entries(folder: Path | str, video_ids: set[str]) -> dict[str, dict[str, Any]]:
+    """Return local gallery entries for only the requested video ids.
+
+    Avoids parsing every ``.info.json`` in the folder; used by the cross-playlist
+    search, which needs at most one page of hits at a time.
+    """
+    d = Path(folder)
+    if not d.is_dir() or not video_ids:
+        return {}
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return {}
+    nameset = set(names)
+    out: dict[str, dict[str, Any]] = {}
+    for name in sorted(names):
+        if Path(name).suffix.lower() not in _VIDEO_EXTS:
+            continue
+        m = _STEM.match(Path(name).stem)
+        if m and m.group(3) in video_ids and m.group(3) not in out:
+            entry = _video_entry(d, name, nameset)
+            out[entry["video_id"]] = entry
+    return out
