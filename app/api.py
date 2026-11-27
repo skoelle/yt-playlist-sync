@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from .db import session_scope, utcnow
@@ -130,6 +130,77 @@ async def playlists(type: str | None = Query(None, pattern="^(sync|oneshot)$")) 
             last = s.scalar(select(Job).where(Job.playlist_id == pl.id).order_by(Job.id.desc()).limit(1))
             out.append(playlist_dict(pl, last))
     return out
+
+
+def _search_status(entry: PlaylistEntry, archived: set[str]) -> str:
+    """Download/availability state of one playlist entry (mirrors ``_missing_entry``)."""
+    if entry.unavailable:
+        return "unavailable"
+    if entry.reason:
+        return "failed"
+    if entry.video_id in archived:
+        return "downloaded"
+    return "pending"
+
+
+@router.get("/search")
+async def search(
+    request: Request,
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> dict[str, Any]:
+    """Full-text video search across all playlists, grouped by video id."""
+    cfg = request.app.state.settings
+    term = q.strip()
+    if not term:
+        return {"query": q, "total": 0, "results": []}
+    cond = and_(*[
+        or_(
+            PlaylistEntry.title.icontains(token, autoescape=True),
+            PlaylistEntry.video_id == token,
+        )
+        for token in term.split()
+    ])
+    with session_scope() as s:
+        id_stmt = select(PlaylistEntry.video_id).where(cond).group_by(PlaylistEntry.video_id)
+        total = int(s.scalar(select(func.count()).select_from(id_stmt.subquery())) or 0)
+        page = list(s.scalars(
+            select(PlaylistEntry.video_id).where(cond)
+            .group_by(PlaylistEntry.video_id)
+            .order_by(func.lower(func.min(PlaylistEntry.title)), PlaylistEntry.video_id)
+            .limit(limit).offset(offset)
+        ).all())
+        if not page:
+            return {"query": q, "total": total, "results": []}
+        rows = s.execute(
+            select(PlaylistEntry, Playlist)
+            .join(Playlist, Playlist.id == PlaylistEntry.playlist_id)
+            .where(PlaylistEntry.video_id.in_(page))
+            .order_by(Playlist.title, PlaylistEntry.position)
+        ).all()
+        archives: dict[str, set[str]] = {}
+        grouped: dict[str, dict[str, Any]] = {}
+        for entry, pl in rows:
+            item = grouped.get(entry.video_id)
+            if item is None:
+                item = {
+                    "video_id": entry.video_id, "title": entry.title or entry.video_id,
+                    "duration_s": entry.duration_s, "unavailable": entry.unavailable,
+                    "playlists": [],
+                }
+                grouped[entry.video_id] = item
+            archived = archives.get(pl.playlist_id)
+            if archived is None:
+                archived = read_archive(cfg.config_dir / "archives" / f"{pl.playlist_id}.txt")
+                archives[pl.playlist_id] = archived
+            item["playlists"].append({
+                "id": pl.id, "playlist_id": pl.playlist_id, "title": pl.title, "type": pl.type,
+                "state": pl.state, "position": entry.position,
+                "remote_present": entry.remote_present, "reason": entry.reason,
+                "status": _search_status(entry, archived),
+            })
+    return {"query": q, "total": total, "results": [grouped[v] for v in page if v in grouped]}
 
 
 class NewPlaylist(BaseModel):

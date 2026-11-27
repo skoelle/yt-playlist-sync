@@ -3,7 +3,7 @@
 "use strict";
 
 const $ = (sel, root = document) => root.querySelector(sel);
-const TABS = ["status", "sync", "oneshot"];
+const TABS = ["status", "sync", "oneshot", "search"];
 const state = {
   tab: "status",
   status: null,
@@ -18,6 +18,7 @@ const state = {
   detailId: null,
   detailFrom: "status",
   player: null,
+  search: { q: "", results: [], total: 0, offset: 0, loading: false, seq: 0, timer: null },
 };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
@@ -250,6 +251,83 @@ function renderSyncs() {
   const videos = state.syncs.reduce((a, p) => a + p.downloaded_count, 0);
   const size = state.syncs.reduce((a, p) => a + p.size_bytes, 0);
   setText("sync-summary", `${state.syncs.length} Sync-Playlists | ${videos} Videos | ${fmtBytes(size)}`);
+}
+
+const SEARCH_STATUS = {
+  downloaded: { label: "downloaded", cls: "s-done" },
+  pending: { label: "not downloaded", cls: "s-pending" },
+  failed: { label: "failed", cls: "s-failed" },
+  unavailable: { label: "unavailable", cls: "s-unavailable" },
+};
+
+function renderSearch() {
+  const S = state.search;
+  const list = $("#search-results");
+  const more = $("#search-more");
+  const q = S.q.trim();
+  if (!q) {
+    setText("search-status", "Type to search across all playlists.");
+    list.innerHTML = "";
+    more.hidden = true;
+    return;
+  }
+  if (S.loading && !S.results.length) {
+    setText("search-status", "Searching...");
+  } else {
+    setText("search-status", `${plural(S.total, "video", "videos")} found`);
+  }
+  list.innerHTML = S.results.map((v) => {
+    const dur = v.duration_s != null ? `<span class="vid-dur-inline">${fmtClock(v.duration_s)}</span>` : "";
+    const title = v.video_id
+      ? `<a href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}" target="_blank" rel="noopener">${esc(v.title)}</a>`
+      : esc(v.title);
+    const pls = v.playlists.map((p) => {
+      const st = SEARCH_STATUS[p.status] || { label: p.status, cls: "" };
+      return `<span class="search-pl"><a href="#playlist-${p.id}">${esc(p.title)}</a>` +
+        `<span class="badge ${st.cls}">${esc(st.label)}</span></span>`;
+    }).join("");
+    return `<div class="search-result">
+      <div class="search-result-title">${title}${dur}</div>
+      <div class="search-result-meta">${pls}</div>
+    </div>`;
+  }).join("") || `<p class="muted">No videos found.</p>`;
+  more.hidden = S.loading || S.results.length >= S.total;
+}
+
+async function runSearch(reset = true) {
+  const S = state.search;
+  const q = reset ? $("#search-input").value.trim() : S.q;
+  S.q = q;
+  clearTimeout(S.timer);
+  if (!q) {
+    S.results = [];
+    S.total = 0;
+    S.offset = 0;
+    S.loading = false;
+    S.seq++;
+    renderSearch();
+    return;
+  }
+  const offset = reset ? 0 : S.offset;
+  const seq = ++S.seq;
+  S.loading = true;
+  renderSearch();
+  try {
+    const r = await api(`/search?q=${encodeURIComponent(q)}&limit=50&offset=${offset}`);
+    if (seq !== S.seq) return;
+    S.results = reset ? r.results : S.results.concat(r.results);
+    S.total = r.total;
+    S.offset = S.results.length;
+  } catch (err) {
+    if (seq !== S.seq) return;
+    setText("search-status", `Search failed: ${err.message}`);
+    return;
+  } finally {
+    if (seq === S.seq) {
+      S.loading = false;
+      renderSearch();
+    }
+  }
 }
 
 const BROKEN_ICON = `<svg viewBox="0 0 32 18" aria-hidden="true" focusable="false">
@@ -565,6 +643,11 @@ function showTab() {
   for (const sec of document.querySelectorAll("main > section")) sec.hidden = sec.dataset.tab !== state.tab;
   const navTab = state.tab === "playlist" ? state.detailFrom : state.tab;
   for (const a of document.querySelectorAll("nav a")) a.classList.toggle("active", a.dataset.tab === navTab);
+  if (state.tab === "search") {
+    renderSearch();
+    $("#search-input").focus();
+    if ($("#search-input").value.trim() !== state.search.q) runSearch(true);
+  }
   tick(true);
 }
 
@@ -605,6 +688,11 @@ async function act(action, el) {
       case "player-next": playerMove(1); return;
       case "discovery-now": await api("/discovery/run", { method: "POST" }); break;
       case "sync-now": await api("/sync/run", { method: "POST" }); break;
+      case "search-more": await runSearch(false); return;
+      case "search-clear":
+        $("#search-input").value = "";
+        await runSearch(true);
+        return;
       default: return;
     }
   } catch (err) {
@@ -664,5 +752,18 @@ $("#player").addEventListener("click", (ev) => {
   if (ev.target === ev.currentTarget && state.player) closePlayer();
 });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") tick(); });
+$("#search-input").addEventListener("input", () => {
+  clearTimeout(state.search.timer);
+  state.search.timer = setTimeout(() => runSearch(true), 250);
+});
+$("#search-input").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    runSearch(true);
+  } else if (ev.key === "Escape") {
+    ev.target.value = "";
+    runSearch(true);
+  }
+});
 setInterval(() => { if (document.visibilityState === "visible") tick(); }, 5000);
 showTab();

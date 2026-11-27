@@ -185,6 +185,16 @@ def test_ui_is_english():
             assert word not in src, word
 
 
+def test_ui_has_search_tab():
+    root = Path(__file__).parent.parent / "app" / "static"
+    html = (root / "index.html").read_text()
+    js = (root / "app.js").read_text()
+    assert 'href="#search"' in html and 'id="search-input"' in html
+    assert 'id="search-results"' in html and 'id="search-more"' in html
+    assert "function renderSearch" in js and "async function runSearch" in js
+    assert '`/search?q=' in js
+
+
 def test_playlist_detail_and_files(client):
     apply_discovery([PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist A")], "setlist")
     pid = client.get("/api/playlists?type=sync").json()[0]["id"]
@@ -319,6 +329,86 @@ def test_playlist_videos_with_placeholders(client):
     ]
     assert videos[2]["title"] == "Broken Song" and videos[2]["duration_s"] == 180
     assert videos[1]["title"] == "[Private video]"
+
+
+def test_search_groups_videos_across_playlists(client):
+    apply_discovery([PlaylistInfo("PL1", "Sommer Mix"), PlaylistInfo("PL2", "Setlist A")], "setlist")
+    pids = {p["playlist_id"]: p["id"] for p in client.get("/api/playlists").json()}
+    now = utcnow()
+    with session_scope() as s:
+        for playlist_id, entries in {
+            "PL1": [("vidshared001", "Live Song", 200), ("vidonly00001", "Other", 10)],
+            "PL2": [("vidshared001", "Live Song", 200), ("vidonly00002", "Live Again", 30)],
+        }.items():
+            for i, (vid, title, duration_s) in enumerate(entries, 1):
+                s.add(PlaylistEntry(playlist_id=pids[playlist_id], video_id=vid, position=i,
+                                    title=title, duration_s=duration_s, last_seen_at=now))
+    for query in ("live", "LIVE"):
+        r = client.get("/api/search", params={"q": query}).json()
+        assert r["total"] == 2
+        shared = next(x for x in r["results"] if x["video_id"] == "vidshared001")
+        assert shared["title"] == "Live Song" and shared["duration_s"] == 200
+        assert {p["playlist_id"] for p in shared["playlists"]} == {"PL1", "PL2"}
+        assert len(shared["playlists"]) == 2
+    # every token must match (AND), not just one of them
+    assert client.get("/api/search", params={"q": "live song"}).json()["total"] == 1
+    r = client.get("/api/search", params={"q": "vidonly00001"}).json()
+    assert [x["video_id"] for x in r["results"]] == ["vidonly00001"]
+
+
+def test_search_terms_are_literal_and_all_required(client):
+    apply_discovery([PlaylistInfo("PL1", "Mix")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+    now = utcnow()
+    with session_scope() as s:
+        for i, (vid, title) in enumerate([
+            ("vidone000001", "Live Song"), ("vidtwo000002", "Song Live"), ("vidthr000003", "100% Pure"),
+        ], 1):
+            s.add(PlaylistEntry(playlist_id=pid, video_id=vid, position=i, title=title, last_seen_at=now))
+    assert client.get("/api/search", params={"q": "live song"}).json()["total"] == 2
+    assert client.get("/api/search", params={"q": "song zzz"}).json()["total"] == 0
+    # % and _ are literal characters, not wildcards
+    r = client.get("/api/search", params={"q": "%"}).json()
+    assert [x["video_id"] for x in r["results"]] == ["vidthr000003"]
+    assert client.get("/api/search", params={"q": "   "}).json() == {
+        "query": "   ", "total": 0, "results": [],
+    }
+    assert client.get("/api/search").status_code == 422
+
+
+def test_search_status_and_pagination(client):
+    apply_discovery([PlaylistInfo("PL1", "Mix")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+    now = utcnow()
+    with session_scope() as s:
+        for i, entry in enumerate([
+            dict(video_id="vidload00001", title="Song Downloaded"),
+            dict(video_id="vidwait00002", title="Song Pending", remote_present=False),
+            dict(video_id="vidfail00003", title="Song Failed", reason="HTTP Error 503"),
+            dict(video_id="vidgone00004", title="Song Unavailable", unavailable=True),
+            dict(video_id="vidload00005", title="Song Archived Removed", remote_present=False),
+        ], 1):
+            s.add(PlaylistEntry(playlist_id=pid, position=i, last_seen_at=now, **entry))
+    archive = client.app.state.settings.config_dir / "archives" / "PL1.txt"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_text("youtube vidload00001\nyoutube vidload00005\n")
+    r = client.get("/api/search", params={"q": "song"}).json()
+    assert r["total"] == 5
+    status = {x["video_id"]: x["playlists"][0]["status"] for x in r["results"]}
+    assert status == {
+        "vidload00001": "downloaded", "vidwait00002": "pending", "vidfail00003": "failed",
+        "vidgone00004": "unavailable", "vidload00005": "downloaded",
+    }
+    remote = {x["video_id"]: x["playlists"][0]["remote_present"] for x in r["results"]}
+    assert remote["vidwait00002"] is False and remote["vidload00001"] is True
+
+    seen = []
+    for offset in (0, 2, 4, 10):
+        page = client.get("/api/search", params={"q": "song", "limit": 2, "offset": offset}).json()
+        assert page["total"] == 5
+        assert len(page["results"]) == {0: 2, 2: 2, 4: 1, 10: 0}[offset]
+        seen.extend(x["video_id"] for x in page["results"])
+    assert sorted(seen) == sorted(status)
 
 
 def test_playlist_video_stream(client):

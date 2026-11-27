@@ -37,7 +37,7 @@ FastAPI (app/main.py, Lifespan)
 | `app/discovery.py` | `apply_discovery` (rein, nie löschen, **keine** `removed`-Markierung mehr – nicht gelistete Playlists bleiben unverändert; Existenz entscheidet der Sync-Lauf), `run_discovery` mit Leerlistenschutz |
 | `app/scheduler.py` | Cron-Jobs (Sync inkl. `SYNC_JITTER`, Update, Cleanup, Backup) + Discovery als Intervall (`_schedule_discovery`/`_discovery_tick`, `DISCOVERY_INTERVAL_MIN/MAX`), Healthchecks-Pings, yt-dlp-Update via Staging unter `/config/ytdlp-libs/` + atomarem Symlink-Swap (`yt-dlp[default]`) + `--rm-cache-dir` nach Versionsänderung, `schedule_update_after_403` (Lock gegen Tages-Update), Flag `ytdlp_updating` sperrt Queue/Discovery während des Swap-Laufs |
 | `app/healthchecks.py` | `ping(url, kind)` – Fehler werden nie weitergeworfen |
-| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`), Unlink (`POST /playlists/{id}/unlink`) schreibt Re-Import-`manifest.json` + Archive-Merge und löscht nur DB-Zeilen (SPEC §15) |
+| `app/api.py` | Endpunkte aus SPEC §8, Serialisierer `job_dict`/`playlist_dict`, 409-Regeln, Media-Streaming `/thumb`+`/video` über `_safe_media_file` (Pfadsicherung), `/videos` mergt Dateien + `playlist_entries` + Archive zu Platzhalter-Zeilen (`_missing_entry`), `/search` gruppiert `playlist_entries` je `video_id` mit Playlist-Zugehörigkeit und Download-Status, Unlink (`POST /playlists/{id}/unlink`) schreibt Re-Import-`manifest.json` + Archive-Merge und löscht nur DB-Zeilen (SPEC §15) |
 | `app/main.py` | `create_app(settings, start_background)` – Tests nutzen `start_background=False` |
 | `app/ta_export.py` | TubeArchivist-Export als Standalone-Skript (`python -m app.ta_export`), kein DB-Zugriff: `TaClient` (REST + Paginierung, `TA_API_HOST` Host-Header), `index_media`, `export()` schreibt Ordner/Sidecars/`manifest.json`/Archive, nie löschen, CLI + `.env`-Loader; läuft auch im Container auf der NAS (`/ta:ro` + `/export` gemountet; Hardlinks dort meist nicht möglich → `auto` fällt auf Kopie zurück); Platzierungs-/Report-Helfer importiert es aus `export_common` unter den alten Namen (`_place_file`, `_same_device`, …) |
 | `app/export_common.py` | Gemeinsamer Kern beider Exporte: `MANIFEST_NAME`/`THUMB_EXTS`, `place_file` (`.part` → rename, `auto` Hardlink→Copy-Fallback, Größen-Check mit `repair`), `write_file`, `same_device`, `safe_id`, `check_mode`, Reports `PlaylistReport`/`ExportReport` + `print_report`, `load_dotenv`, `human` |
@@ -96,7 +96,7 @@ JS prüfen: `node --check app/static/app.js`. Docker-Build lokal: `docker build 
 - Datenbank- und API-Tests setzen `pytest.importorskip(...)` für die DB/Frame-Pakete und initialisieren die DB über `init_engine(c.db_url)` + `migrate(c.db_url)` in der `cfg`-Fixture. Die Engine ist global – jeder Test braucht eigene `tmp_path`-Pfade.
 - API-Tests: `TestClient(create_app(cfg, start_background=False))` (kein Scheduler/Queue-Loop).
 - Alle Pfade laufen über `tmp_path`, keine fixen Verzeichnisse.
-- Bestehender Stand: **185 Tests grün** (`pytest -q`, ~95 s).
+- Bestehender Stand: **189 Tests grün** (`pytest -q`, ~95 s).
 
 ## Harte Regeln
 
