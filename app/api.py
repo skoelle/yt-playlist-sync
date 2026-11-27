@@ -161,6 +161,7 @@ async def search(
     cond = and_(*[
         or_(
             PlaylistEntry.title.icontains(token, autoescape=True),
+            PlaylistEntry.channel.icontains(token, autoescape=True),
             PlaylistEntry.video_id == token,
         )
         for token in term.split()
@@ -191,9 +192,11 @@ async def search(
                 item = {
                     "video_id": entry.video_id, "title": entry.title or entry.video_id,
                     "duration_s": entry.duration_s, "unavailable": entry.unavailable,
-                    "media": None, "playlists": [],
+                    "channel": None, "media": None, "playlists": [],
                 }
                 grouped[entry.video_id] = item
+            if entry.channel and not item["channel"]:
+                item["channel"] = entry.channel
             archived = archives.get(pl.playlist_id)
             if archived is None:
                 archived = read_archive(cfg.config_dir / "archives" / f"{pl.playlist_id}.txt")
@@ -323,7 +326,7 @@ def _missing_entry(e: dict[str, Any], archived: set[str]) -> dict[str, Any]:
         "index": e["position"], "video_id": e["video_id"],
         "title": e["title"] or e["video_id"], "file": None, "thumb": None,
         "duration_s": e["duration_s"], "upload_date": None, "view_count": None,
-        "like_count": None, "channel": None, "resolution": None, "vcodec": None,
+        "like_count": None, "channel": e.get("channel"), "resolution": None, "vcodec": None,
         "acodec": None, "vbr": None, "abr": None, "size_bytes": 0, "sidecars": [],
         "missing": True, "status": status, "reason": reason,
     }
@@ -342,7 +345,8 @@ async def playlist_videos(pid: int, request: Request) -> dict[str, Any]:
         ).all()
         entries = [
             {"video_id": r.video_id, "position": r.position, "title": r.title,
-             "duration_s": r.duration_s, "unavailable": r.unavailable, "reason": r.reason}
+             "channel": r.channel, "duration_s": r.duration_s, "unavailable": r.unavailable,
+             "reason": r.reason}
             for r in rows
         ]
     target = _playlist_folder(cfg, folder_name)

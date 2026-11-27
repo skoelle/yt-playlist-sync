@@ -182,6 +182,10 @@ def _import_one(
         folder_ok = folder.is_dir()
         gallery = read_video_entries(folder, manifest.playlist_id)
         files = int(gallery["video_count"])
+        channels = {
+            v["video_id"]: v["channel"] for v in gallery["videos"]
+            if v.get("video_id") and v.get("channel")
+        }
 
         if folder_ok:
             complete = bool(manifest.entries) and files >= len(manifest.entries)
@@ -243,6 +247,7 @@ def _import_one(
 
         for entry in manifest.entries:
             video_id = str(entry["video_id"])
+            channel = channels.get(video_id)
             row = s.scalar(
                 select(PlaylistEntry).where(
                     PlaylistEntry.playlist_id == pl.id, PlaylistEntry.video_id == video_id
@@ -255,6 +260,7 @@ def _import_one(
                         video_id=video_id,
                         position=int(entry.get("position") or 0),
                         title=str(entry.get("title") or video_id)[:500],
+                        channel=channel[:300] if channel else None,
                         duration_s=_duration(entry.get("duration_s")),
                         unavailable=False,
                         remote_present=True,
@@ -266,6 +272,8 @@ def _import_one(
                 row.position = int(entry["position"])
             if entry.get("title"):
                 row.title = str(entry["title"])[:500]
+            if channel:
+                row.channel = channel[:300]
             duration = _duration(entry.get("duration_s"))
             if duration is not None:
                 row.duration_s = duration

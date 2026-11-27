@@ -155,6 +155,24 @@ def test_migration_adds_manual_column_is_idempotent(tmp_path):
     assert "manual" in cols
 
 
+def test_migration_adds_channel_column_is_idempotent(tmp_path):
+    import sqlalchemy as sa
+
+    from app.config import ensure_dirs
+    from app.db import init_engine, migrate
+
+    cfg = Settings(
+        youtube_channel="@beispielkanal", data_dir=tmp_path / "data", config_dir=tmp_path / "config"
+    )
+    ensure_dirs(cfg)
+    init_engine(cfg.db_url)
+    migrate(cfg.db_url)
+    migrate(cfg.db_url)  # running the chain again must be a no-op (existence guards)
+    eng = sa.create_engine(cfg.db_url)
+    cols = {c["name"] for c in sa.inspect(eng).get_columns("playlist_entries")}
+    assert "channel" in cols
+
+
 def test_ui_sync_tab_has_summary_and_sort():
     root = Path(__file__).parent.parent / "app" / "static"
     html = (root / "index.html").read_text()
@@ -196,6 +214,7 @@ def test_ui_has_search_tab():
     assert "function searchRow" in js and "class=\"vid-table\"" in js
     assert "function startPlayer" in js and "searchPlayerItems" in js
     assert 'data-playlist="${playlistId}"' in js
+    assert "v.channel" in js
 
 
 def test_playlist_detail_and_files(client):
@@ -295,8 +314,8 @@ def test_playlist_videos_with_placeholders(client):
             PlaylistEntry(playlist_id=pid, video_id="priv0000001", position=2, title="[Private video]",
                           unavailable=True, last_seen_at=utcnow()),
             PlaylistEntry(playlist_id=pid, video_id="fail0000001", position=3, title="Broken Song",
-                          duration_s=180, reason="HTTP Error 503: Service Unavailable",
-                          last_seen_at=utcnow()),
+                          channel="Artist X", duration_s=180,
+                          reason="HTTP Error 503: Service Unavailable", last_seen_at=utcnow()),
             PlaylistEntry(playlist_id=pid, video_id="arch0000001", position=4, title="Archived",
                           last_seen_at=utcnow()),
             PlaylistEntry(playlist_id=pid, video_id="wait0000001", position=5, title="Waiting",
@@ -331,6 +350,7 @@ def test_playlist_videos_with_placeholders(client):
         ("pending", None),
     ]
     assert videos[2]["title"] == "Broken Song" and videos[2]["duration_s"] == 180
+    assert videos[2]["channel"] == "Artist X"
     assert videos[1]["title"] == "[Private video]"
 
 
@@ -397,6 +417,31 @@ def test_search_terms_are_literal_and_all_required(client):
         "query": "   ", "total": 0, "results": [],
     }
     assert client.get("/api/search").status_code == 422
+
+
+def test_search_matches_channel_name(client):
+    apply_discovery([PlaylistInfo("PL1", "Mix")], "setlist")
+    pid = client.get("/api/playlists?type=sync").json()[0]["id"]
+    now = utcnow()
+    with session_scope() as s:
+        for i, (vid, title, channel) in enumerate([
+            ("vidartist001", "Song One", "Excide - Topic"),
+            ("vidartist002", "Live At Home", "Excide - Topic"),
+            ("vidother0003", "Something", "Other Artist"),
+        ], 1):
+            s.add(PlaylistEntry(playlist_id=pid, video_id=vid, position=i, title=title,
+                                channel=channel, last_seen_at=now))
+    r = client.get("/api/search", params={"q": "excide"}).json()
+    assert [x["video_id"] for x in r["results"]] == ["vidartist002", "vidartist001"]
+    assert all(x["channel"] == "Excide - Topic" for x in r["results"])
+    assert client.get("/api/search", params={"q": "EXCIDE"}).json()["total"] == 2
+    # mixed token: one token matches the channel, the other the title
+    r = client.get("/api/search", params={"q": "excide live"}).json()
+    assert [x["video_id"] for x in r["results"]] == ["vidartist002"]
+    assert client.get("/api/search", params={"q": "other"}).json()["total"] == 1
+    # a channel-only hit without a local file stays a placeholder with its channel
+    placeholder = client.get("/api/search", params={"q": "song"}).json()["results"][0]
+    assert placeholder["media"] is None and placeholder["channel"] == "Excide - Topic"
 
 
 def test_search_status_and_pagination(client):

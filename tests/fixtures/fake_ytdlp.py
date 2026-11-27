@@ -36,7 +36,11 @@ def main():
                 log_err(f"ERROR: [youtube:playlist] {pid}: The playlist does not exist")
                 return 1
             print(json.dumps({"_type": "playlist", "id": pid,
-                              "entries": [{"id": v["id"], "title": v["title"]} for v in vids]}))
+                              "entries": [
+                                  {"id": v["id"], "title": v["title"],
+                                   **({"channel": v["channel"]} if v.get("channel") else {})}
+                                  for v in vids
+                              ]}))
         return 0
 
     archive = Path(args[args.index("--download-archive") + 1])

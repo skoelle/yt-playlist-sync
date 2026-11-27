@@ -18,7 +18,7 @@ from app import ytdlp  # noqa: E402
 from app.config import Settings, ensure_dirs  # noqa: E402
 from app.db import init_engine, migrate, session_scope, utcnow  # noqa: E402
 from app.discovery import apply_discovery, run_discovery  # noqa: E402
-from app.jobqueue import JobQueue  # noqa: E402
+from app.jobqueue import JobQueue, backfill_channels  # noqa: E402
 from app.models import Job, Playlist, PlaylistEntry, Run  # noqa: E402
 from app.scheduler import AppScheduler  # noqa: E402
 from app.ytdlp import PlaylistInfo  # noqa: E402
@@ -282,6 +282,14 @@ def entries_of(pl_pid: str):
         return [(r.video_id, r.position, r.unavailable, r.reason, r.remote_present) for r in rows]
 
 
+def channels_of(pl_pid: str):
+    with session_scope() as s:
+        pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == pl_pid))
+        return {r.video_id: r.channel for r in s.scalars(
+            select(PlaylistEntry).where(PlaylistEntry.playlist_id == pk)
+        ).all()}
+
+
 async def start_and_wait(cfg, queue: JobQueue) -> list[int]:
     """Boot the worker, run discovery and wait until every queued job finished."""
     await queue.start()
@@ -357,6 +365,53 @@ def test_playlist_entries_unavailable_marker(cfg, stub):
         await queue.stop()
 
     asyncio.run(scenario())
+
+
+def test_channel_from_listing_persisted_and_not_cleared(cfg, stub):
+    stub.data_ref["playlists"]["PLaaa"][0]["channel"] = "Artist One"
+    stub.data_ref["playlists"]["PLaaa"][1]["channel"] = "Artist Two"
+    stub.save()
+
+    async def scenario():
+        queue = JobQueue(cfg)
+        await start_and_wait(cfg, queue)
+        assert channels_of("PLaaa") == {
+            "vid00000001": "Artist One", "vid00000002": "Artist Two", "vid00000003": None,
+        }
+        # a later listing without channel information must not wipe known values
+        for video in stub.data_ref["playlists"]["PLaaa"]:
+            video.pop("channel", None)
+        stub.save()
+        with session_scope() as s:
+            pk = s.scalar(select(Playlist.id).where(Playlist.playlist_id == "PLaaa"))
+        jid = queue.enqueue(pk, "manual")
+        assert jid is not None
+        await queue.wait_for_jobs([jid], poll=0.2)
+        assert channels_of("PLaaa")["vid00000001"] == "Artist One"
+        assert channels_of("PLaaa")["vid00000002"] == "Artist Two"
+        await queue.stop()
+
+    asyncio.run(scenario())
+
+
+def test_backfill_channels_from_local_info_json(cfg):
+    apply_discovery([PlaylistInfo("PL1", "Mix")], "setlist")
+    now = utcnow()
+    with session_scope() as s:
+        pl = s.scalar(select(Playlist).where(Playlist.playlist_id == "PL1"))
+        pl.folder_name = "Mix [PL1]"
+        s.add(PlaylistEntry(playlist_id=pl.id, video_id="aaaaaaaaaaa", title="A", last_seen_at=now))
+        s.add(PlaylistEntry(playlist_id=pl.id, video_id="bbbbbbbbbbb", title="B",
+                            channel="Known", last_seen_at=now))
+    folder = cfg.data_dir / "Mix [PL1]"
+    folder.mkdir(parents=True)
+    (folder / "01 - A [aaaaaaaaaaa].mkv").write_bytes(b"v")
+    (folder / "01 - A [aaaaaaaaaaa].info.json").write_text('{"title": "A", "channel": "Artist"}')
+    (folder / "02 - B [bbbbbbbbbbb].mkv").write_bytes(b"v")
+    (folder / "02 - B [bbbbbbbbbbb].info.json").write_text('{"title": "B", "channel": "Other"}')
+    assert backfill_channels(cfg) == 1
+    assert channels_of("PL1") == {"aaaaaaaaaaa": "Artist", "bbbbbbbbbbb": "Known"}
+    assert backfill_channels(cfg) == 0
 
 
 def test_priority_order_without_worker(cfg):

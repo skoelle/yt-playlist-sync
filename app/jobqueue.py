@@ -11,7 +11,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from . import ytdlp
 from .config import Settings
@@ -25,6 +25,57 @@ log = logging.getLogger(__name__)
 PRIORITY = {"manual": 0, "retry": 0, "full_rerun": 0, "discovery": 1, "nightly": 2}
 AUTO_TRIGGERS = ("discovery", "nightly")
 RATE_LIMIT_PAUSE = timedelta(minutes=30)
+
+
+def backfill_channels(settings: Settings) -> int:
+    """Fill missing ``playlist_entries.channel`` values from local ``.info.json`` files.
+
+    Listing snapshots populate the channel for new runs; this catches rows from
+    older runs, including finished oneshot playlists. Only NULL values are
+    written, so a concurrent listing update is never overwritten.
+    """
+    with session_scope() as s:
+        rows = s.execute(
+            select(PlaylistEntry.playlist_id, Playlist.folder_name, PlaylistEntry.video_id)
+            .join(Playlist, Playlist.id == PlaylistEntry.playlist_id)
+            .where(PlaylistEntry.channel.is_(None), Playlist.folder_name.is_not(None))
+        ).all()
+    targets: dict[int, tuple[str, set[str]]] = {}
+    for playlist_pk, folder_name, video_id in rows:
+        if not folder_name:
+            continue
+        if playlist_pk not in targets:
+            targets[playlist_pk] = (folder_name, set())
+        targets[playlist_pk][1].add(video_id)
+
+    updated = 0
+    base = settings.data_dir.resolve()
+    for playlist_pk, (folder_name, video_ids) in targets.items():
+        folder = (base / folder_name).resolve()
+        if not folder.is_relative_to(base):
+            log.warning("channel backfill skipped unsafe folder %r", folder_name)
+            continue
+        found = ytdlp.find_video_entries(folder, video_ids)
+        if not found:
+            continue
+        with session_scope() as s:
+            for video_id, entry in found.items():
+                channel = entry.get("channel")
+                if not channel:
+                    continue
+                result = s.execute(
+                    update(PlaylistEntry)
+                    .where(
+                        PlaylistEntry.playlist_id == playlist_pk,
+                        PlaylistEntry.video_id == video_id,
+                        PlaylistEntry.channel.is_(None),
+                    )
+                    .values(channel=str(channel)[:300])
+                )
+                updated += max(int(result.rowcount or 0), 0)
+    if updated:
+        log.info("backfilled channel for %d playlist entries", updated)
+    return updated
 
 
 class JobQueue:
@@ -374,6 +425,8 @@ class JobQueue:
                 rows[entry.id] = row
             row.position = entry.position
             row.title = entry.title[:500]
+            if entry.channel:
+                row.channel = entry.channel[:300]
             row.duration_s = entry.duration_s
             row.unavailable = entry.unavailable
             row.remote_present = True

@@ -116,6 +116,7 @@ class PlaylistEntry(Base):
     video_id: Mapped[str] = mapped_column(String(16))
     position: Mapped[int] = mapped_column(Integer, default=0)
     title: Mapped[str] = mapped_column(String(500), default="")
+    channel: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
     duration_s: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     unavailable: Mapped[bool] = mapped_column(Boolean, default=False)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

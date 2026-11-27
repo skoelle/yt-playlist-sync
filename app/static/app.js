@@ -361,6 +361,7 @@ function missingRow(v, extra = "") {
     ? `<a href="https://www.youtube.com/watch?v=${encodeURIComponent(v.video_id)}" target="_blank" rel="noopener" title="Open on YouTube">${esc(v.title)}</a>`
     : esc(v.title);
   const meta = [];
+  if (v.channel) meta.push(esc(v.channel));
   if (v.index) meta.push(`#${v.index}`);
   meta.push(`<span class="badge ${st.cls}">${esc(st.label)}</span>`);
   const reason = v.reason ? `<div class="vid-reason">${esc(v.reason)}</div>` : "";
@@ -409,8 +410,10 @@ const SEARCH_MISSING_RANK = { failed: 0, unavailable: 1, archived: 2, pending: 3
 function searchRow(v) {
   const extra = `<div class="vid-playlists">In: ${searchPlaylists(v)}</div>`;
   if (v.media) {
-    return videoRow({ ...v.media, title: v.title || v.media.title, video_id: v.video_id },
-      v.media.playlist_id, extra);
+    return videoRow({
+      ...v.media, title: v.title || v.media.title, video_id: v.video_id,
+      channel: v.media.channel || v.channel,
+    }, v.media.playlist_id, extra);
   }
   const byStatus = [...(v.playlists || [])].sort((a, b) =>
     (SEARCH_MISSING_RANK[a.status] ?? 9) - (SEARCH_MISSING_RANK[b.status] ?? 9));

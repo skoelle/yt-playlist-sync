@@ -63,6 +63,7 @@ class VideoEntry:
     unavailable: bool = False
     position: int = 0
     duration_s: int | None = None
+    channel: str | None = None
 
 
 @dataclass
@@ -226,10 +227,12 @@ def parse_video_listing(data: dict[str, Any]) -> list[VideoEntry]:
         title = e.get("title") or ""
         duration = e.get("duration")
         idx = e.get("playlist_index")
+        channel = e.get("channel") or e.get("uploader")
         out.append(VideoEntry(
             e["id"], title, title.strip().lower() in UNAVAILABLE_TITLES,
             position=int(idx) if isinstance(idx, int) and idx > 0 else i,
             duration_s=int(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+            channel=channel[:300] if isinstance(channel, str) and channel else None,
         ))
     return out
 

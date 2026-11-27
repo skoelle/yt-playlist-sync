@@ -47,6 +47,17 @@ def test_parse_video_listing_positions_and_duration():
     ]
 
 
+def test_parse_video_listing_channel():
+    data = {"entries": [
+        {"id": "a", "title": "A", "channel": "Artist"},
+        {"id": "b", "title": "B", "uploader": "Other"},
+        {"id": "c", "title": "C", "channel": ""},
+        {"id": "d", "title": "D"},
+    ]}
+    out = ytdlp.parse_video_listing(data)
+    assert [e.channel for e in out] == ["Artist", "Other", None, None]
+
+
 def test_parse_line_events():
     assert ytdlp.parse_line("YTPS| 42.5%|1.2MiB/s|00:10") == {
         "type": "progress", "percent": 42.5, "speed": "1.2MiB/s", "eta": "00:10"}
